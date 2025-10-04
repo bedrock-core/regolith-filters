@@ -22,7 +22,7 @@ If you're coming from the [gametests](https://github.com/Bedrock-OSS/regolith-fi
 Install the filter using Regolith:
 
 ```bash
-regolith install github.com/@bedrock-core/regolith-filters/bundler
+regolith install github.com/bedrock-core/regolith-filters/bundler
 ```
 
 Or use the provided starter in `starter-example`
