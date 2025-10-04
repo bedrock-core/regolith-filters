@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema",
+  "$id": "core-bundler",
+  "type": "object",
+  "description": "Regolith filter for bundling TypeScript files into a single JavaScript file.",
+  "properties": {
+    "tsConfigPath": {
+      "type": "string",
+      "default": "tsconfig.json",
+      "description": "Path to the tsconfig.json file relative to the project root."
+    },
+    "debug": {
+      "type": "boolean",
+      "default": false,
+      "description": "Enable debug mode with source maps, no minification, and readable output."
+    }
+  }
+}

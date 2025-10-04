@@ -1,0 +1,24 @@
+{
+  "name": "starter-example",
+  "version": "1.0.0",
+  "main": "main.js",
+  "scripts": {
+    "loopback": "CheckNetIsolation.exe LoopbackExempt -a -p=S-1-15-2-1958404141-86561845-1752920682-3514627264-368642714-62675701-733520436",
+    "loopback:preview": "CheckNetIsolation.exe LoopbackExempt -a -p=S-1-15-2-424268864-5579737-879501358-346833251-474568803-887069379-4040235476"
+  },
+  "dependencies": {
+    "@minecraft/common": "1.2.0",
+    "@minecraft/math": "2.2.8",
+    "@minecraft/server": "2.1.0",
+    "@minecraft/server-ui": "2.0.0",
+    "@minecraft/vanilla-data": "1.21.100",
+    "typescript": "^5.4.5",
+    "uuid": "^10.0.0"
+  },
+  "devDependencies": {
+    "@types/uuid": "^10.0.0",
+    "globals": "^15.8.0",
+    "typescript": "^5.9.2"
+  },
+  "packageManager": "yarn@4.9.4"
+}
