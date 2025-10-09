@@ -96,7 +96,7 @@ Example (`BP/blocks/multiple.block.ts`):
 
 ```ts
 type Options = {
-  id: string; // used for output filename and identifier suffix
+  id: string;
   displayName: string;
   mapColor: string;
   friction?: number;

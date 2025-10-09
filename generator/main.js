@@ -25,7 +25,7 @@ const settings = Object.assign({}, defaults, argParsed);
 const userProvidedInclude = Object.prototype.hasOwnProperty.call(argParsed, "include");
 const userProvidedExclude = Object.prototype.hasOwnProperty.call(argParsed, "exclude");
 
-console.log("🛠️ @bedrock-core/generator");
+console.log("🛠️  @bedrock-core/generator");
 console.log("📂 Project root:", projectRoot);
 console.log("📂 Working directory (temp):", process.cwd());
 
@@ -247,18 +247,36 @@ async function main() {
       .sort();
 
     if (files.length === 0) {
-      console.log("ℹ️ No .ts templates found.");
+      console.log("ℹ️  No .ts templates found.");
       return;
     }
 
     console.log(`📄 Found ${files.length} file(s)`);
     let total = 0;
+    const processed = [];
 
     for (const f of files) {
-      total += await processTsFile(f);
+      const generated = await processTsFile(f);
+      total += generated;
+      processed.push(f);
     }
 
     console.log(`✨ Generated ${total} JSON file(s).`);
+
+    // Remove processed .ts template files from the temp workspace (not the project root)
+    if (processed.length) {
+      console.log("🧹 Cleaning up template TypeScript files...");
+      for (const f of processed) {
+        try {
+          if (f.endsWith(".ts")) {
+            fs.unlinkSync(f);
+            console.log(`   ✓ Removed ${f}`);
+          }
+        } catch (err) {
+          console.warn(`   ⚠ Could not remove ${f}:`, err.message);
+        }
+      }
+    }
   } catch (e) {
     console.error("❌ Generation failed:", e.message || e);
     process.exit(1);
