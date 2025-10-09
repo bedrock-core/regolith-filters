@@ -114,6 +114,10 @@ The following Minecraft modules are automatically marked as external (not bundle
 
 ## Changelog
 
+### 1.0.1
+
+- Fixed folders not being removed after bundling
+
 ### 1.0.0
 
 - Release
