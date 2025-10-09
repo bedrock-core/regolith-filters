@@ -1,0 +1,10 @@
+{
+  "description": "Regolith filter for generating multiple json files from a TypeScript template for Minecraft Bedrock Edition",
+  "filters": [
+    {
+      "name": "Generate templates",
+      "runWith": "nodejs",
+      "script": "./main.js"
+    }
+  ]
+}

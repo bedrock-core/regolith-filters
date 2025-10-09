@@ -1,0 +1,49 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema",
+  "$id": "core-generator",
+  "type": "object",
+  "description": "Regolith filter for generating JSON files from TypeScript templates (single or multiple) for Minecraft Bedrock Edition.",
+  "properties": {
+    "include": {
+      "description": "Glob pattern(s) to scan for template .ts files. Paths are relative to temp workspace; 'packs/' prefix is automatically stripped if present.",
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      ],
+      "default": [
+        "BP/**/*.ts",
+        "RP/**/*.ts"
+      ]
+    },
+    "exclude": {
+      "description": "Glob pattern(s) to exclude from scanning.",
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      ],
+      "default": [
+        "BP/scripts/**",
+        "**/*.d.ts"
+      ]
+    },
+    "pretty": {
+      "type": "boolean",
+      "description": "Pretty-print generated JSON (four-space indentation). If false, outputs minified JSON.",
+      "default": true
+    }
+  }
+}

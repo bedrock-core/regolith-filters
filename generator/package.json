@@ -1,0 +1,12 @@
+{
+  "name": "@bedrock-core/regolith-filters_generator",
+  "version": "1.0.0",
+  "description": "",
+  "dependencies": {
+    "esbuild": "^0.25.10",
+    "glob": "^10.3.1",
+    "json5": "^2.2.1",
+    "source-map": "^0.7.4"
+  },
+  "packageManager": "yarn@4.9.4"
+}
