@@ -48,7 +48,7 @@ The filter accepts optional settings:
 {
   "filter": "bundler",
   "settings": {
-    "tsConfigPath": "config/tsconfig.build.json",
+    "tsConfigPath": "tsconfig.build.json",
     "debug": true
   }
 }

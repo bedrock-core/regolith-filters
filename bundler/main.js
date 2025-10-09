@@ -1,6 +1,5 @@
 const { build } = require("esbuild");
 const fs = require("fs");
-const { globSync } = require("glob");
 const json5 = require("json5");
 const path = require("path");
 
@@ -43,6 +42,7 @@ const defSettings = {
   tsConfigPath: "tsconfig.json",
   debug: false,
 };
+
 const argParsed = process.argv[2] ? JSON.parse(process.argv[2]) : {};
 const settings = Object.assign({}, defSettings, argParsed);
 
@@ -93,7 +93,6 @@ function resolveEntryPoints(tsconfig) {
     entryPoint = firstFile
       .replace(/\\/g, "/")
       .replace(/^packs\/BP\//, "BP/")
-      .replace(/^packs\/RP\//, "RP/")
       .replace(/^packs\//, "");
 
     if (fs.existsSync(entryPoint)) {
@@ -107,9 +106,8 @@ function resolveEntryPoints(tsconfig) {
     const pattern = tsconfig.include[0]
       .replace(/\\/g, "/")
       .replace(/^packs\/BP\//, "BP/")
-      .replace(/^packs\/RP\//, "RP/")
       .replace(/^packs\//, "")
-      .replace(/\/\*\*\/\*$/, ""); // Remove /**/* glob
+      .replace(/\/\*\*\/\*$/, "");
 
     const possibleEntries = [
       `${pattern}/main.ts`,
@@ -127,9 +125,7 @@ function resolveEntryPoints(tsconfig) {
   // Option 3: Fallback - search for any main.ts or index.ts
   const fallbackEntries = [
     "BP/scripts/main.ts",
-    "BP/scripts/index.ts",
-    "RP/scripts/main.ts",
-    "RP/scripts/index.ts",
+    "BP/scripts/index.ts"
   ];
 
   for (const entry of fallbackEntries) {
@@ -150,7 +146,8 @@ function resolveEntryPoints(tsconfig) {
 }
 
 /**
- * Clean up TypeScript source files from output directory
+ * Clean up TypeScript source files and directories from output directory
+ * Keep only main.js and main.js.map
  */
 function cleanupTypeScriptFiles() {
   const outputDir = "BP/scripts";
@@ -158,18 +155,31 @@ function cleanupTypeScriptFiles() {
 
   console.log("🧹 Cleaning up TypeScript files from", outputDir);
 
-  const tsFiles = globSync("**/*.ts", { cwd: outputDir, nodir: true });
-  const dtsFiles = globSync("**/*.d.ts", { cwd: outputDir, nodir: true });
+  // Get all files and directories in scripts folder
+  const allEntries = fs.readdirSync(outputDir, { withFileTypes: true });
 
-  [...tsFiles, ...dtsFiles].forEach(file => {
-    const filePath = path.join(outputDir, file);
-    try {
-      fs.unlinkSync(filePath);
-      console.log(`   ✓ Removed ${file}`);
-    } catch (error) {
-      console.warn(`   ⚠ Could not remove ${file}:`, error);
+  for (const entry of allEntries) {
+    const entryPath = path.join(outputDir, entry.name);
+
+    // Keep main.js and main.js.map
+    if (entry.name === "main.js" || entry.name === "main.js.map") {
+      continue;
     }
-  });
+
+    try {
+      if (entry.isDirectory()) {
+        // Remove directory and all its contents recursively
+        fs.rmSync(entryPath, { recursive: true, force: true });
+        console.log(`   ✓ Removed directory ${entry.name}/`);
+      } else {
+        // Remove file
+        fs.unlinkSync(entryPath);
+        console.log(`   ✓ Removed ${entry.name}`);
+      }
+    } catch (error) {
+      console.warn(`   ⚠ Could not remove ${entry.name}:`, error.message);
+    }
+  }
 }
 
 /**
@@ -177,6 +187,7 @@ function cleanupTypeScriptFiles() {
  */
 async function main() {
   try {
+    console.log("🚀 Starting build process...");
     // Load tsconfig
     const tsconfig = loadTsConfig();
 
@@ -208,7 +219,6 @@ async function main() {
 
     // Add debug-specific options
     if (settings.debug) {
-      buildOptions.logLevel = "info";
       buildOptions.metafile = true;
     }
 
