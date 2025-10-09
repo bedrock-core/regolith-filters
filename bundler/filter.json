@@ -1,10 +1,10 @@
 {
-  "description": "Bundles TypeScript files into a single JavaScript file for Minecraft packs.",
-  "filters": [
-    {
-      "name": "Bundle TypeScript",
-      "runWith": "nodejs",
-      "script": "./main.js"
-    }
-  ]
+	"description": "Bundles TypeScript files into a single JavaScript file for Minecraft packs.",
+	"filters": [
+		{
+			"name": "Bundle TypeScript",
+			"runWith": "nodejs",
+			"script": "./main.js"
+		}
+	]
 }

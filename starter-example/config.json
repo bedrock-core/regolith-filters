@@ -2,7 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/Bedrock-OSS/regolith-schemas/main/config/v1.4.json",
   "author": "DrAv0011",
   "name": "starter-example",
-  "description": "Start example reference for regolith-filters_bundler",
+  "description": "Start example reference for @bedrock-core regolith-filters",
   "packs": {
     "behaviorPack": "./packs/BP",
     "resourcePack": "./packs/RP"
@@ -11,28 +11,16 @@
     "dataPath": "./packs/data",
     "formatVersion": "1.4.0",
     "filterDefinitions": {
-      "bundler": {
+      "generator": {
         "url": "github.com/@bedrock-core/regolith-filters",
         "version": "1.0.0"
+      },
+      "bundler": {
+        "url": "github.com/@bedrock-core/regolith-filters",
+        "version": "1.0.1"
       }
     },
     "profiles": {
-      "build": {
-        "export": {
-          "readOnly": true,
-          "target": "local",
-          "build": "standard"
-        },
-        "filters": [
-          {
-            "filter": "bundler",
-            "settings": {
-              "tsConfigPath": "./tsconfig.dev.json",
-              "debug": true
-            }
-          }
-        ]
-      },
       "default": {
         "export": {
           "readOnly": false,
@@ -41,7 +29,23 @@
         },
         "filters": [
           {
-            "filter": "bundler"
+            "filter": "generator",
+            "settings": {
+              "include": [
+                "**/*.ts"
+              ],
+              "exclude": [
+                "BP/scripts/**",
+                "**/*.d.ts"
+              ],
+              "pretty": true
+            }
+          },
+          {
+            "filter": "bundler",
+            "settings": {
+              "debug": true
+            }
           }
         ]
       }
