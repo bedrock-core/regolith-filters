@@ -1,5 +1,6 @@
 const { build } = require("esbuild");
 const fs = require("fs");
+const { getTsconfig } = require("get-tsconfig");
 const json5 = require("json5");
 const path = require("path");
 
@@ -69,10 +70,19 @@ if (settings.debug) {
  */
 function loadTsConfig() {
   try {
-    const content = fs.readFileSync(tsconfigPath, "utf-8");
-    const config = json5.parse(content);
-    console.log("✅ Loaded tsconfig.json");
-    return config;
+    const result = getTsconfig(tsconfigPath);
+    
+    if (!result) {
+      console.error(`❌ Failed to load tsconfig.json at: ${tsconfigPath}`);
+      process.exit(1);
+    }
+    
+    console.log('✅ Loaded tsconfig.json from', tsconfigPath);
+    if (result.config.extends) {
+      console.log('   Extended from:', result.config.extends);
+    }
+    
+    return result.config;
   } catch (error) {
     console.error("❌ Failed to parse tsconfig.json:", error);
     process.exit(1);
