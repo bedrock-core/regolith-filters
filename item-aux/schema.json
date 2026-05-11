@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema",
+  "$id": "core-item-aux",
+  "type": "object",
+  "description": "Regolith filter that generates itemAuxMap.generated.json with aux IDs for vanilla and custom items.",
+  "properties": {
+    "customStart": {
+      "type": ["integer", "null"],
+      "default": null,
+      "description": "Item ID assigned to the first custom item (sorted alphabetically). When null (default), derived automatically as max(vanilla raw_id) + 1."
+    },
+    "itemsUrl": {
+      "type": "string",
+      "default": "https://raw.githubusercontent.com/Mojang/bedrock-samples/refs/heads/main/metadata/vanilladata_modules/mojang-items.json",
+      "description": "URL to fetch vanilla item metadata from."
+    },
+    "cacheMaxAgeHours": {
+      "type": "number",
+      "default": 24,
+      "description": "How long (in hours) to keep the cached vanilla items JSON before re-fetching."
+    },
+    "outputPath": {
+      "type": "string",
+      "default": "BP/scripts/data/itemAuxMap.generated.json",
+      "description": "Output path for the generated JSON, relative to the Regolith temp directory."
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+	"description": "Generates itemAuxMap.generated.json: vanilla item aux values from Mojang data + custom item aux values from RP/textures/item_texture.json.",
+	"filters": [
+		{
+			"name": "Generate Item Aux Map",
+			"runWith": "nodejs",
+			"script": "./main.js"
+		}
+	]
+}

@@ -6,7 +6,6 @@ type Options = {
   light?: number;
 };
 
-// default export: function that returns a Bedrock JSON object (must be a function with a single params argument)
 export default [
   (options: Options): string => `${options.id}.json`,
   (options: Options) => {
