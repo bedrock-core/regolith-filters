@@ -1,0 +1,10 @@
+{
+	"description": "Generates translationKeys.generated.json by merging vanilla bedrock-samples translations with pack .lang files.",
+	"filters": [
+		{
+			"name": "Generate Translation Keys",
+			"runWith": "nodejs",
+			"script": "./main.js"
+		}
+	]
+}

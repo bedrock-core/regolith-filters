@@ -1,8 +1,15 @@
 // @bedrock-core/regolith-filters — item-aux
-// Generates BP/scripts/data/itemAuxMap.generated.json with:
-//   • Vanilla items: aux = raw_id * 65536  (source: Mojang bedrock-samples)
-//   • Custom items:  aux = (customStart + alphabetical_index) * 65536
-//                    (source: RP/textures/item_texture.json, non-minecraft: entries)
+// Generates BP/scripts/data/itemAuxMap.generated.json with aux IDs for all items.
+//
+// ID pools (Bedrock runtime rules):
+//   • Vanilla items/blocks   raw_id -1038..828 → aux = raw_id * 65536
+//   • New custom items       1.16.100+ format  → IDs 256..255+N (shifts vanilla IDs >= 256)
+//   • Old custom items       1.10 format       → IDs 829..829+N (no interference)
+//   • Custom blocks          BP/blocks/        → IDs -1039, -1040, ... (alphabetical, decreasing)
+//   • Overrides              settings.overrides→ explicit raw_id values, take precedence over all computed
+//
+// Custom item identifiers come from RP/textures/item_texture.json (non-minecraft: keys).
+// If customStart is set in settings, it takes precedence over default (256).
 
 'use strict';
 
@@ -45,10 +52,12 @@ const ITEMS_URL =
     'https://raw.githubusercontent.com/Mojang/bedrock-samples/refs/heads/main/metadata/vanilladata_modules/mojang-items.json';
 
 const defaults = {
-    customStart: null,
+    customStart: null,  // null = 256 (new format items, shifts vanilla); if set, overrides default
     itemsUrl: ITEMS_URL,
     cacheMaxAgeHours: 24,
     outputPath: 'BP/scripts/data/itemAuxMap.generated.json',
+    /** @type {Record<string, number>} explicit raw_id overrides (identifier → raw_id); take priority over all computed IDs */
+    overrides: {},
 };
 
 const argParsed = process.argv[2] ? JSON.parse(process.argv[2]) : {};
@@ -128,11 +137,12 @@ async function main() {
     /** @type {Array<[string, number]>} */
     const vanillaEntries = validItems.map(item => [item.name, item.raw_id * 65536]);
 
-    // Resolve customStart: use explicit setting or derive from max vanilla raw_id.
     const maxVanillaId = validItems.reduce((max, item) => Math.max(max, item.raw_id), 0);
-    const customStart =
-        settings.customStart != null ? settings.customStart : maxVanillaId + 1;
-    console.log(`ℹ️  Custom item start ID: ${customStart} (max vanilla raw_id: ${maxVanillaId})`);
+    console.log(`ℹ️  Max vanilla raw_id: ${maxVanillaId}`);
+
+    // Custom items start at 256 (or explicit customStart if set)
+    const customStart = settings.customStart != null ? settings.customStart : 256;
+    console.log(`ℹ️  Custom item start ID: ${customStart}`);
 
     // ── Custom items from item_texture.json ───────────────────────────────────
     /** @type {Array<[string, number]>} */

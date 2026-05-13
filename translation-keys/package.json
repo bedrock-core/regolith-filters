@@ -1,0 +1,6 @@
+{
+  "name": "@bedrock-core/regolith-filters_translation-keys",
+  "version": "1.0.0",
+  "description": "Regolith filter that merges vanilla and pack .lang translations into a generated JSON map for use in addon scripts.",
+  "packageManager": "yarn@4.9.4"
+}

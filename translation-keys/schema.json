@@ -1,0 +1,29 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema",
+  "$id": "core-translation-keys",
+  "type": "object",
+  "description": "Regolith filter that generates translationKeys.generated.json by merging vanilla bedrock-samples translations with pack .lang files.",
+  "properties": {
+    "vanillaLangUrl": {
+      "type": "string",
+      "default": "https://raw.githubusercontent.com/Mojang/bedrock-samples/refs/heads/main/resource_pack/texts/en_US.lang",
+      "description": "URL to fetch the vanilla en_US.lang file from."
+    },
+    "cacheMaxAgeHours": {
+      "type": "number",
+      "default": 24,
+      "description": "How long (in hours) to keep the cached vanilla .lang file before re-fetching."
+    },
+    "outputJsonPath": {
+      "type": "string",
+      "default": "BP/scripts/data/translationKeys.generated.json",
+      "description": "Output path for the generated JSON map (key → resolved string), relative to the Regolith temp directory."
+    },
+    "langFiles": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": ["RP/texts/en_US.lang", "BP/texts/en_US.lang"],
+      "description": "Pack .lang files to merge on top of vanilla (in order). Relative to the Regolith temp directory. Later files override earlier ones."
+    }
+  }
+}
