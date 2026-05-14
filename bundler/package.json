@@ -1,6 +1,6 @@
 {
   "name": "@bedrock-core/regolith-filters_bundler",
-  "version": "1.0.2",
+  "version": "1.0.4",
   "description": "",
   "dependencies": {
     "esbuild": "^0.25.10",
