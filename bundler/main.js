@@ -206,6 +206,7 @@ async function main() {
 
     // Configure esbuild
     const outputFile = "BP/scripts/main.js";
+    const jsxImportSource = tsconfig.compilerOptions?.jsxImportSource;
     const buildOptions = {
       entryPoints,
       outfile: outputFile,
@@ -216,6 +217,8 @@ async function main() {
       minify: !settings.debug,
       sourcemap: settings.debug,
       keepNames: settings.debug,
+      jsx: "automatic",
+      ...(jsxImportSource && { jsxImportSource }),
       // Mark Minecraft modules as external (provided by the game at runtime)
       external: [
         "@minecraft/server",
