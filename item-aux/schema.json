@@ -2,13 +2,8 @@
   "$schema": "http://json-schema.org/draft-07/schema",
   "$id": "core-item-aux",
   "type": "object",
-  "description": "Regolith filter that generates itemAuxMap.generated.json with aux IDs for vanilla and custom items.",
+  "description": "Regolith filter that generates itemAuxMap.generated.json with aux IDs for vanilla items, custom items, and custom blocks.",
   "properties": {
-    "customStart": {
-      "type": ["integer", "null"],
-      "default": null,
-      "description": "Item ID assigned to the first custom item (sorted alphabetically). When null (default), derived automatically as max(vanilla raw_id) + 1."
-    },
     "itemsUrl": {
       "type": "string",
       "default": "https://raw.githubusercontent.com/Mojang/bedrock-samples/refs/heads/main/metadata/vanilladata_modules/mojang-items.json",
@@ -23,6 +18,11 @@
       "type": "string",
       "default": "BP/scripts/data/itemAuxMap.generated.json",
       "description": "Output path for the generated JSON, relative to the Regolith temp directory."
+    },
+    "blockBaseOffset": {
+      "type": "number",
+      "default": 8621,
+      "description": "Offset added to |minVanillaId| to compute the custom block base ID. Increase by N if custom blocks render at wrong slots after loading a pack that registers additional blocks before yours."
     }
   }
 }

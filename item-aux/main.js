@@ -1,15 +1,19 @@
 // @bedrock-core/regolith-filters — item-aux
 // Generates BP/scripts/data/itemAuxMap.generated.json with aux IDs for all items.
 //
-// ID pools (Bedrock runtime rules):
-//   • Vanilla items/blocks   raw_id -1038..828 → aux = raw_id * 65536
-//   • New custom items       1.16.100+ format  → IDs 256..255+N (shifts vanilla IDs >= 256)
-//   • Old custom items       1.10 format       → IDs 829..829+N (no interference)
-//   • Custom blocks          BP/blocks/        → IDs -1039, -1040, ... (alphabetical, decreasing)
-//   • Overrides              settings.overrides→ explicit raw_id values, take precedence over all computed
+// Encoding (post-1.16.100 new-format custom items):
+//   • Vanilla blocks/items (raw_id < 256):   aux = raw_id * 65536
+//   • Vanilla items (raw_id >= 256):          aux = (raw_id + customItemCount) * 65536
+//   • Custom items (new format, 1.16.100+):   aux = (257 + i) * 65536
+//   • Custom blocks (terrain_texture.json, rev-alpha): aux = -(|minVanillaId| + blockBaseOffset + i) * 65536
+//
+// New-format custom items occupy IDs 257 … 256+customItemCount, pushing all
+// vanilla items that were ≥ 256 upward by customItemCount. This matches the
+// post-1.16.100 Bedrock runtime behaviour documented at:
+// https://wiki.bedrock.dev/items/numerical-item-ids
 //
 // Custom item identifiers come from RP/textures/item_texture.json (non-minecraft: keys).
-// If customStart is set in settings, it takes precedence over default (256).
+// Custom block identifiers come from RP/textures/terrain_texture.json (non-minecraft: keys, reverse-alpha sort).
 
 'use strict';
 
@@ -52,12 +56,10 @@ const ITEMS_URL =
     'https://raw.githubusercontent.com/Mojang/bedrock-samples/refs/heads/main/metadata/vanilladata_modules/mojang-items.json';
 
 const defaults = {
-    customStart: null,  // null = 256 (new format items, shifts vanilla); if set, overrides default
     itemsUrl: ITEMS_URL,
     cacheMaxAgeHours: 24,
     outputPath: 'BP/scripts/data/itemAuxMap.generated.json',
-    /** @type {Record<string, number>} explicit raw_id overrides (identifier → raw_id); take priority over all computed IDs */
-    overrides: {},
+    blockBaseOffset: 8621,
 };
 
 const argParsed = process.argv[2] ? JSON.parse(process.argv[2]) : {};
@@ -129,24 +131,18 @@ async function main() {
         throw new Error('Unexpected JSON shape: expected a .data_items array');
     }
 
-    /** @type {Array<[string, number]>} */
+    /** @type {Array<{name: string, raw_id: number}>} */
     const validItems = dataItems.filter(
         item => typeof item.name === 'string' && typeof item.raw_id === 'number',
     );
 
-    /** @type {Array<[string, number]>} */
-    const vanillaEntries = validItems.map(item => [item.name, item.raw_id * 65536]);
-
     const maxVanillaId = validItems.reduce((max, item) => Math.max(max, item.raw_id), 0);
-    console.log(`ℹ️  Max vanilla raw_id: ${maxVanillaId}`);
+    const minVanillaId = validItems.reduce((min, item) => Math.min(min, item.raw_id), 0);
+    console.log(`ℹ️  Vanilla raw_id range: ${minVanillaId} … ${maxVanillaId}`);
 
-    // Custom items start at 256 (or explicit customStart if set)
-    const customStart = settings.customStart != null ? settings.customStart : 256;
-    console.log(`ℹ️  Custom item start ID: ${customStart}`);
-
-    // ── Custom items from item_texture.json ───────────────────────────────────
-    /** @type {Array<[string, number]>} */
-    const customEntries = [];
+    // ── Count custom items first so the offset can be applied to vanilla ─────
+    /** @type {string[]} */
+    let customIds = [];
 
     if (fs.existsSync(itemTexturePath)) {
         const textureJson = JSON.parse(fs.readFileSync(itemTexturePath, 'utf-8'));
@@ -156,13 +152,9 @@ async function main() {
             // Only non-vanilla namespaced identifiers (e.g. "myaddon:cool_sword").
             // Vanilla items appear with bare short-names ("diamond_sword") or
             // "minecraft:" prefix in the texture atlas — both are excluded.
-            const customIds = Object.keys(textureData)
+            customIds = Object.keys(textureData)
                 .filter(k => k.includes(':') && !k.startsWith('minecraft:'))
                 .sort(); // alphabetical sort is mandatory for deterministic ID assignment
-
-            for (let i = 0; i < customIds.length; i++) {
-                customEntries.push([customIds[i], (customStart + i) * 65536]);
-            }
 
             const vanillaInTexture = Object.keys(textureData).length - customIds.length;
             console.log(
@@ -174,17 +166,68 @@ async function main() {
         console.log('ℹ️  RP/textures/item_texture.json not found — no custom items added');
     }
 
+    const customItemCount = customIds.length;
+    console.log(`ℹ️  Custom item count (offset applied to vanilla raw_id >= 256): ${customItemCount}`);
+
+    // ── Vanilla entries ──────────────────────────
+    // For id >= 256, the post-1.16.100 reshuffle shifts vanilla IDs by the
+    // custom item count to make room for addon items. Blocks (id < 256, plus
+    // negative IDs for new blocks) pass through unchanged.
+    /** @type {Array<[string, number]>} */
+    const vanillaEntries = validItems.map(item => {
+        const id = item.raw_id;
+        const offset = id >= 256 ? customItemCount : 0;
+        return [item.name, (id + offset) * 65536];
+    });
+
+    // ── Custom entries: IDs 257 … 256+customItemCount ─────────────────────────
+    // New-format custom items (1.16.100+) occupy the ID range starting at 257,
+    // which is why vanilla items with raw_id >= 256 are shifted up by customItemCount.
+    /** @type {Array<[string, number]>} */
+    const customEntries = customIds.map((name, i) => [name, (257 + i) * 65536]);
+
+    // ── Custom blocks: IDs -(customBlockBase+i) ───────────────────────────────
+    // The base is derived from the minimum vanilla raw_id: each new vanilla block
+    // decrements minVanillaId by 1 and increments the base by 1, so:
+    //   base = |minVanillaId| + blockBaseOffset   (auto-tracks Bedrock updates)
+    // Ordering: alphabetical sort on terrain_texture.json non-minecraft: keys.
+    const customBlockBase = Math.abs(minVanillaId) + settings.blockBaseOffset;
+    console.log(`ℹ️  customBlockBase = |${minVanillaId}| + ${settings.blockBaseOffset} = ${customBlockBase}`);
+
+    /** @type {Array<[string, number]>} */
+    let customBlockEntries = [];
+
+    const terrainTexturePath = path.join(process.cwd(), 'RP', 'textures', 'terrain_texture.json');
+
+    if (fs.existsSync(terrainTexturePath)) {
+        const terrainJson = JSON.parse(fs.readFileSync(terrainTexturePath, 'utf-8'));
+        const terrainData = terrainJson?.texture_data;
+
+        if (terrainData && typeof terrainData === 'object') {
+            const customBlockIds = Object.keys(terrainData)
+                .filter(k => k.includes(':') && !k.startsWith('minecraft:'))
+                .sort((a, b) => b.localeCompare(a)); // reverse alpha — matches Bedrock's ID assignment order
+
+            console.log(`✅ terrain_texture.json: ${customBlockIds.length} custom blocks → [${customBlockIds.join(', ')}]`);
+            customBlockEntries = customBlockIds.map((name, i) => [name, -(customBlockBase + i) * 65536]);
+        }
+    } else {
+        console.log('ℹ️  terrain_texture.json not found — no custom blocks added');
+    }
+
     // ── Merge & write ─────────────────────────────────────────────────────────
     /** @type {Record<string, number>} */
     const map = {};
     for (const [name, aux] of vanillaEntries) map[name] = aux;
     for (const [name, aux] of customEntries) map[name] = aux;
+    for (const [name, aux] of customBlockEntries) map[name] = aux;
 
     fs.mkdirSync(path.dirname(outputPath), { recursive: true });
     fs.writeFileSync(outputPath, JSON.stringify(map, null, '\t'), 'utf-8');
 
     console.log(
-        `✅ Written ${vanillaEntries.length} vanilla + ${customEntries.length} custom` +
+        `✅ Written ${vanillaEntries.length} vanilla + ${customEntries.length} custom items` +
+        ` + ${customBlockEntries.length} custom blocks` +
         ` = ${Object.keys(map).length} total → ${outputPath}`,
     );
 }

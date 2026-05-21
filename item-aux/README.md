@@ -8,8 +8,16 @@ Bedrock's JSON UI uses Aux IDs to render items. This filter produces `BP/scripts
 
 Aux formula: `aux = item_id * 65536`
 
-- **Vanilla items** — `item_id` = `raw_id` from Mojang's official `bedrock-samples` metadata
-- **Custom items** — `item_id` = `customStart + alphabetical_index`, where identifiers come from your RP's `textures/item_texture.json` (non-`minecraft:` namespaced entries only, sorted alphabetically for deterministic assignment)
+| Category | `item_id` |
+|---|---|
+| Vanilla block/item (`raw_id < 256`) | `raw_id` |
+| Vanilla item (`raw_id ≥ 256`) | `raw_id + customItemCount` |
+| Custom item (new format, 1.16.100+) | `257 + alphabetical_index` |
+| Custom block | `-(customBlockBase + reverse_alpha_index)` |
+
+New-format custom items occupy IDs 257 … 256+N (where N = number of custom items), pushing vanilla items that were ≥ 256 upward by N to make room. Identifiers come from your RP's `textures/item_texture.json` (non-`minecraft:` namespaced entries, sorted alphabetically for deterministic assignment).
+
+Custom blocks use large negative IDs. The base is computed as `|minVanillaId| + blockBaseOffset` (default offset `8621`), where `minVanillaId` is the most-negative vanilla raw_id from the downloaded items data. This means the base auto-adjusts as Mojang adds new vanilla blocks — no manual recalibration needed across normal updates. Identifiers are read from `RP/textures/terrain_texture.json` (non-`minecraft:` namespaced keys) and sorted in **reverse alphabetical order** — this matches the order Bedrock assigns internal block IDs.
 
 ## Installation
 
@@ -92,12 +100,12 @@ Example `RP/textures/item_texture.json`:
 }
 ```
 
-Custom identifiers are sorted **alphabetically** before ID assignment, so the mapping is deterministic regardless of declaration order. Given `customStart = 829`:
+Custom identifiers are sorted **alphabetically** before ID assignment, so the mapping is deterministic regardless of declaration order. With 2 custom items:
 
 | Identifier | item_id | aux |
 |---|---|---|
-| `myaddon:cool_sword` | 829 | 54329344 |
-| `myaddon:magic_wand` | 830 | 54394880 |
+| `myaddon:cool_sword` | 257 | 16842752 |
+| `myaddon:magic_wand` | 258 | 16908288 |
 
 If `RP/textures/item_texture.json` is absent, the filter runs successfully with only vanilla items.
 
@@ -106,13 +114,13 @@ If `RP/textures/item_texture.json` is absent, the filter runs successfully with 
 Vanilla item metadata is fetched from GitHub and cached at:
 
 ```
-packs/data/item-aux/vanilla-items.cache.json
+.regolith/cache/item-aux/vanilla-items.cache.json
 ```
 
-This file lives in your project source tree so it persists across Regolith runs. Add it to `.gitignore` if you don't want to commit it:
+This lives inside the Regolith cache directory so it persists across runs and is cleaned by `regolith clean`. Add it to `.gitignore` if you prefer not to commit it:
 
 ```
-packs/data/item-aux/
+.regolith/cache/item-aux/
 ```
 
 The cache is refreshed when it is older than `cacheMaxAgeHours` (default: 24 hours).
@@ -121,10 +129,10 @@ The cache is refreshed when it is older than `cacheMaxAgeHours` (default: 24 hou
 
 | Setting | Type | Default | Description |
 |---|---|---|---|
-| `customStart` | `integer \| null` | `null` | First item ID for custom items. When `null`, automatically derived as `max(vanilla raw_id) + 1` |
 | `itemsUrl` | `string` | Mojang bedrock-samples URL | URL to fetch vanilla item metadata from |
 | `cacheMaxAgeHours` | `number` | `24` | Hours before the vanilla cache is considered stale |
 | `outputPath` | `string` | `BP/scripts/data/itemAuxMap.generated.json` | Output path relative to the Regolith temp directory |
+| `blockBaseOffset` | `number` | `8621` | Offset added to `\|minVanillaId\|` to compute the custom block base. Increase by N if custom blocks render at wrong IDs after loading a new pack that registers additional blocks before yours |
 
 Example with explicit settings:
 
@@ -132,7 +140,6 @@ Example with explicit settings:
 {
   "filter": "item-aux",
   "settings": {
-    "customStart": 829,
     "cacheMaxAgeHours": 48
   }
 }
@@ -143,8 +150,9 @@ Example with explicit settings:
 1. Regolith runs this filter inside its temp workspace and sets `ROOT_DIR` to your project root.
 2. The filter checks the local cache. If missing or stale, it fetches vanilla item metadata from `itemsUrl` and writes the cache.
 3. It reads `RP/textures/item_texture.json` from the temp folder (if present) and collects non-`minecraft:` identifiers.
-4. Custom identifiers are sorted alphabetically and assigned sequential IDs starting from `customStart`.
-5. Vanilla and custom entries are merged and written to `outputPath`.
+4. Custom item identifiers are sorted alphabetically and assigned sequential IDs starting from 257.
+5. It reads `RP/textures/terrain_texture.json` (if present), collects non-`minecraft:` namespaced keys, sorts them in **reverse alphabetical order**, and assigns large negative IDs starting at `-(customBlockBase)`.
+6. Vanilla, custom item, and custom block entries are merged and written to `outputPath`.
 
 ## Troubleshooting
 
@@ -153,6 +161,7 @@ Example with explicit settings:
 - **"Unexpected JSON shape: expected a .data_items array"** — The fetched vanilla metadata doesn't match the expected Mojang format. Try updating `itemsUrl`.
 - **Custom items missing** — Ensure `RP/textures/item_texture.json` exists and that custom keys use a non-`minecraft:` namespace (e.g., `myaddon:item_name`).
 - **IDs shifting unexpectedly** — Custom IDs depend on alphabetical sort order. Never rename custom item identifiers without updating all references.
+- **Custom blocks render at wrong slot** — `blockBaseOffset` must account for blocks registered by other packs that load before yours. Increase it by the number of blocks those packs add. The filter log prints the computed `customBlockBase` to help diagnose this.
 
 ## References
 
@@ -162,6 +171,14 @@ Example with explicit settings:
 - [Mojang bedrock-samples — mojang-items.json](https://raw.githubusercontent.com/Mojang/bedrock-samples/refs/heads/main/metadata/vanilladata_modules/mojang-items.json) — official vanilla item metadata (source for `raw_id` values)
 
 ## Changelog
+
+### 1.2.0
+
+- Added custom block support: reads non-`minecraft:` keys from `RP/textures/terrain_texture.json`, sorts them in **reverse alphabetical order**, and assigns IDs `-(customBlockBase + i)`. Block base is computed dynamically as `|minVanillaId| + blockBaseOffset` (default `8621`). This matches the empirically confirmed order Bedrock assigns internal block IDs.
+
+### 1.1.0
+
+- Fixed custom item ID assignment: new-format items (1.16.100+) now correctly use IDs starting at 257 (not 256), matching Bedrock's runtime behaviour. Previously used negative IDs which mapped to vanilla blocks instead of custom textures.
 
 ### 1.0.0
 
