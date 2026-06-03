@@ -50,27 +50,17 @@ Then add it to your `config.json` **before** the `bundler` filter:
 
 ## Usage in addon scripts
 
-Wrap your UI root with `ItemAuxProvider` — no props needed, data is loaded and calibrated automatically:
+No wrapping required — once the filter is installed and the tsconfig path alias is configured, `render()` seeds `ItemAuxContext` automatically from the generated JSON (with runtime calibration applied). `ItemRenderer` just works.
+
+To override the item aux data for a subtree (e.g. custom item data), wrap with `ItemAuxContext` directly:
 
 ```tsx
-import { ItemAuxProvider } from '@bedrock-core/ui';
-
-render(
-  <ItemAuxProvider>
-    <MyInventory />
-  </ItemAuxProvider>,
-  player,
-);
-```
-
-Pass `data` explicitly to override the default source:
-
-```tsx
+import { ItemAuxContext } from '@bedrock-core/ui';
 import itemAuxData from '@bedrock-core/generated/item-aux';
 
-<ItemAuxProvider data={itemAuxData}>
+<ItemAuxContext value={itemAuxData}>
   <MyInventory />
-</ItemAuxProvider>
+</ItemAuxContext>
 ```
 
 ### TypeScript setup
@@ -166,7 +156,7 @@ Example with explicit settings:
 
 ### Runtime calibration
 
-Developer builds of Bedrock sometimes include items that are absent from the public `bedrock-samples` API. These items occupy raw_id slots and displace all subsequent vanilla items. `ItemAuxProvider` corrects for this automatically via `getCalibratedAuxMap` (exported from `@bedrock-core/ui`):
+Developer builds of Bedrock sometimes include items that are absent from the public `bedrock-samples` API. These items occupy raw_id slots and displace all subsequent vanilla items. `render()` corrects for this automatically via `getCalibratedAuxMap` (exported from `@bedrock-core/ui`) when seeding `ItemAuxContext` at the render root:
 
 1. On first render it calls `ItemTypes.getAll()` (from `@minecraft/server`).
 2. It counts how many registered `minecraft:` items are **not** in the generated map — these are developer-only extras.
@@ -197,7 +187,7 @@ On a normal public build the extra count is 0 and the map is returned unchanged.
 
 - Added companion `itemMetadata.generated.json` output containing `allVanillaTypeIds` and `correctableItems` (vanilla items with `raw_id ≥ shiftThreshold`).
 - Added `shiftThreshold` setting (default `632`) controlling which items are listed as correctable.
-- Added `BP/scripts/data/calibratedAuxMap.ts` (consumer side) — detects developer-build extra items via `ItemTypes.getAll()` at runtime and applies a correction of `+N × 65536` to all correctable items, where N is the count of detected extras. Normal/public builds are unaffected (correction is 0).
+- Runtime calibration logic (`getCalibratedAuxMap`) ships as part of `@bedrock-core/ui-runtime` and runs automatically at the render root — it detects developer-build extra items via `ItemTypes.getAll()` at runtime and applies a correction of `+N × 65536` to all correctable items, where N is the count of detected extras. Normal/public builds are unaffected (correction is 0).
 
 ### 1.2.0
 

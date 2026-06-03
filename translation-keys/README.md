@@ -45,20 +45,7 @@ Then add it to your `config.json` **before** the `bundler` filter:
 
 ## Usage in addon scripts
 
-Wrap your UI root with `TranslationKeysProvider` — no props needed, data is loaded automatically:
-
-```tsx
-import { TranslationKeysProvider } from '@bedrock-core/ui';
-
-render(
-  <TranslationKeysProvider>
-    <MyScreen />
-  </TranslationKeysProvider>,
-  player,
-);
-```
-
-Then use the `localizationKey` prop on `Text` components instead of long `children` strings:
+No wrapping required — once the filter is installed and the tsconfig path alias is configured, `render()` seeds `TranslationKeysContext` automatically from the generated JSON. `Text` with a `localizationKey` prop just works:
 
 ```tsx
 // Instead of this (throws SerializationError — exceeds 80 bytes):
@@ -76,21 +63,22 @@ ui.myscreen.description=Aliqua velit laborum ullamco dolor ullamco occaecat nisi
 
 Short strings (under 80 UTF-8 bytes) can continue to use `children` as before — both forms are supported on the same `Text` component.
 
-Pass `data` explicitly to override the default source:
+To override the translation data for a subtree (e.g. a different language or custom strings), wrap with `TranslationKeysContext` directly:
 
 ```tsx
-import translationKeys from '@bedrock-core/generated/translation-keys';
+import { TranslationKeysContext } from '@bedrock-core/ui';
+import myKeys from './myCustomKeys.json';
 
-<TranslationKeysProvider data={translationKeys}>
+<TranslationKeysContext value={myKeys}>
   <MyScreen />
-</TranslationKeysProvider>
+</TranslationKeysContext>
 ```
 
 ### TypeScript setup
 
 On `regolith install`, the filter copies a `translationKeys.generated.d.ts` declaration into your project's `data/translation-keys/` folder. Commit this file — TypeScript uses it as a fallback before Regolith runs.
 
-Add the following path alias to your `tsconfig.json` so TypeScript and the bundler resolve the `@bedrock-core/generated/translation-keys` alias used internally by `TranslationKeysProvider`:
+Add the following path alias to your `tsconfig.json` so TypeScript and the bundler resolve the `@bedrock-core/generated/translation-keys` alias used internally by the runtime:
 
 ```json
 {
@@ -106,11 +94,11 @@ Add the following path alias to your `tsconfig.json` so TypeScript and the bundl
 
 ## Runtime errors
 
-If you use `localizationKey` without providing `TranslationKeysContext`, or if the key is missing from the generated map, the `Text` component throws a descriptive error at render time:
+If you use `localizationKey` and the generated JSON is missing (filter not installed or path alias not configured), or if the key is missing from the generated map, the `Text` component throws a descriptive error at render time:
 
 | Situation | Error |
 |---|---|
-| `TranslationKeysContext` not provided | `TranslationKeysError: TranslationKeysContext is not provided. Did you forget to install the 'translation-keys' Regolith filter...` |
+| Generated JSON missing / filter not installed | `TranslationKeysError: TranslationKeysContext is not provided. Did you forget to install the 'translation-keys' Regolith filter...` |
 | Key not found in map | `TranslationKeysError: Cannot calculate layout for localizationKey "ui.foo" — no resolved string found...` |
 
 Both errors are exported from `@bedrock-core/ui` as `TranslationKeysError` so you can catch them specifically.
@@ -167,6 +155,11 @@ The cache lives in `.regolith/cache/` and is cleaned with `regolith clean`. The 
 - [@bedrock-core/ui — Text component](../../ui/packages/ui-runtime/src/components/Text.ts) — `localizationKey` prop
 
 ## Changelog
+
+### 1.1.0
+
+- `TranslationKeysContext` is now seeded automatically at the render root by `@bedrock-core/ui-runtime` — no `TranslationKeysProvider` wrapper is required. `localizationKey` works out of the box once the filter is installed and the tsconfig path alias is configured.
+- `TranslationKeysContext` can still be used directly to override the data for a subtree.
 
 ### 1.0.0
 
