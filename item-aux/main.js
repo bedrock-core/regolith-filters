@@ -1,5 +1,5 @@
 // @bedrock-core/regolith-filters — item-aux
-// Generates BP/scripts/data/itemAuxMap.generated.json with aux IDs for all items.
+// Generates data/item-aux/itemAuxMap.generated.json with aux IDs for all items.
 //
 // Encoding (post-1.16.100 new-format custom items):
 //   • Vanilla blocks/items (raw_id < 256):   aux = raw_id * 65536
@@ -58,8 +58,15 @@ const ITEMS_URL =
 const defaults = {
     itemsUrl: ITEMS_URL,
     cacheMaxAgeHours: 24,
-    outputPath: 'BP/scripts/data/itemAuxMap.generated.json',
+    outputPath: 'data/item-aux/itemAuxMap.generated.json',
     blockBaseOffset: 8621,
+    // Vanilla items with raw_id >= shiftThreshold may have their actual game
+    // raw_id displaced by developer-only items that aren't in the public API.
+    // The companion itemMetadata.generated.json lists these items so the addon
+    // script can detect and correct the offset at runtime via ItemTypes.getAll().
+    // 632 is the empirically-confirmed first raw_id that differs between the
+    // public bedrock-samples and developer Bedrock builds.
+    shiftThreshold: 632,
 };
 
 const argParsed = process.argv[2] ? JSON.parse(process.argv[2]) : {};
@@ -217,19 +224,36 @@ async function main() {
 
     // ── Merge & write ─────────────────────────────────────────────────────────
     /** @type {Record<string, number>} */
-    const map = {};
-    for (const [name, aux] of vanillaEntries) map[name] = aux;
-    for (const [name, aux] of customEntries) map[name] = aux;
-    for (const [name, aux] of customBlockEntries) map[name] = aux;
+    const items = {};
+    for (const [name, aux] of vanillaEntries) items[name] = aux;
+    for (const [name, aux] of customEntries) items[name] = aux;
+    for (const [name, aux] of customBlockEntries) items[name] = aux;
+
+    // correctionBoundaryAux is the lowest aux value that belongs to a vanilla
+    // item that may be displaced by developer-build items absent from the public
+    // API. At runtime the script adds extraDevCount * 65536 to every entry
+    // whose aux >= this boundary.
+    //
+    // Formula: (shiftThreshold + customItemCount) * 65536
+    //   shiftThreshold = first raw_id affected by dev-build displacement (632)
+    //   customItemCount = number of custom items in this pack (shifts the range)
+    //
+    // Items below the boundary (old-format blocks/items, custom items) always
+    // have aux well under this value and are never corrected.
+    const correctionBoundaryAux = (settings.shiftThreshold + customItemCount) * 65536;
+
+    const output = { items, correctionBoundaryAux };
 
     fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-    fs.writeFileSync(outputPath, JSON.stringify(map, null, '\t'), 'utf-8');
+    fs.writeFileSync(outputPath, JSON.stringify(output, null, '\t'), 'utf-8');
 
     console.log(
         `✅ Written ${vanillaEntries.length} vanilla + ${customEntries.length} custom items` +
         ` + ${customBlockEntries.length} custom blocks` +
-        ` = ${Object.keys(map).length} total → ${outputPath}`,
+        ` = ${Object.keys(items).length} total, correctionBoundaryAux=${correctionBoundaryAux}` +
+        ` → ${outputPath}`,
     );
+
 }
 
 main().catch(err => {

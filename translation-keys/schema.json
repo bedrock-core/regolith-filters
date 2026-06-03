@@ -16,7 +16,7 @@
     },
     "outputJsonPath": {
       "type": "string",
-      "default": "BP/scripts/data/translationKeys.generated.json",
+      "default": "data/translation-keys/translationKeys.generated.json",
       "description": "Output path for the generated JSON map (key → resolved string), relative to the Regolith temp directory."
     },
     "langFiles": {

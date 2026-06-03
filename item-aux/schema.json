@@ -16,13 +16,18 @@
     },
     "outputPath": {
       "type": "string",
-      "default": "BP/scripts/data/itemAuxMap.generated.json",
+      "default": "data/item-aux/itemAuxMap.generated.json",
       "description": "Output path for the generated JSON, relative to the Regolith temp directory."
     },
     "blockBaseOffset": {
       "type": "number",
       "default": 8621,
       "description": "Offset added to |minVanillaId| to compute the custom block base ID. Increase by N if custom blocks render at wrong slots after loading a pack that registers additional blocks before yours."
+    },
+    "shiftThreshold": {
+      "type": "integer",
+      "default": 632,
+      "description": "Vanilla items with raw_id >= this value are listed in itemMetadata.generated.json as 'correctableItems'. The addon script uses this list at runtime to apply a correction when developer-build items (absent from the public API) displace the raw_ids of these items. The default 632 is the empirically-confirmed first affected raw_id."
     }
   }
 }

@@ -1,5 +1,5 @@
 // @bedrock-core/regolith-filters — translation-keys
-// Generates BP/scripts/data/translationKeys.generated.json with merged translations.
+// Generates data/translation-keys/translationKeys.generated.json with merged translations.
 //
 // Merge order (later entries override earlier ones):
 //   1. Vanilla en_US.lang from Mojang's bedrock-samples GitHub (cached)
@@ -34,7 +34,7 @@ const VANILLA_LANG_URL =
 const defaults = {
     vanillaLangUrl: VANILLA_LANG_URL,
     cacheMaxAgeHours: 24,
-    outputJsonPath: 'BP/scripts/data/translationKeys.generated.json',
+    outputJsonPath: 'data/translation-keys/translationKeys.generated.json',
     langFiles: ['RP/texts/en_US.lang', 'BP/texts/en_US.lang'],
 };
 
@@ -167,6 +167,7 @@ async function main() {
     fs.mkdirSync(path.dirname(outputJsonPath), { recursive: true });
     fs.writeFileSync(outputJsonPath, JSON.stringify(sortedJson, null, '\t'), 'utf-8');
     console.log(`✅ Written JSON map (${totalKeys} keys) → ${outputJsonPath}`);
+
 }
 
 main().catch(err => {

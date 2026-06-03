@@ -5,6 +5,64 @@ const json5 = require("json5");
 const path = require("path");
 
 /**
+ * Esbuild plugin that resolves tsconfig path aliases against the Regolith temp
+ * workspace instead of the real project root.
+ *
+ * esbuild's built-in tsconfig support resolves `paths` entries relative to the
+ * tsconfig file (projectRoot). But generated files (e.g. itemAuxMap.generated.json)
+ * only exist in Regolith's temp workspace during a build — not on disk at projectRoot.
+ * Regolith also strips the `packs/` prefix when copying files into the temp workspace,
+ * so `./packs/data/foo/bar.json` in the tsconfig maps to `data/foo/bar.json` in temp.
+ *
+ * This plugin intercepts those aliases before esbuild's native resolver and redirects
+ * them to the correct temp-workspace path, making them available regardless of where
+ * the import originates (including library sources like ui-runtime).
+ */
+const tsconfigPathsPlugin = (tsconfigPaths) => {
+  // Only intercept aliases whose tsconfig candidate lives under packs/data/ —
+  // these are Regolith-generated files that exist in the temp workspace but not
+  // on the real disk at projectRoot. All other aliases (source files, node_modules)
+  // are left to esbuild's native tsconfig resolver.
+  const aliasMap = new Map();
+  const cwd = process.cwd(); // Regolith temp workspace
+  for (const [alias, candidates] of Object.entries(tsconfigPaths)) {
+    if (!candidates || candidates.length === 0) continue;
+    const rawCandidate = candidates[0];
+    // Skip aliases that don't point into packs/data/ — those resolve fine on disk.
+    if (!rawCandidate.startsWith("./packs/data/") && !rawCandidate.startsWith("packs/data/")) continue;
+    const aliasKey = alias.endsWith("/*") ? alias.slice(0, -2) : alias;
+    const isGlob = alias.endsWith("/*");
+    // Strip packs/ prefix: Regolith copies packs/data/ → data/ in the temp workspace.
+    const tempRelative = rawCandidate
+      .replace(/^\.\/packs\//, "./")
+      .replace(/\*/g, "");
+    const resolvedBase = path.resolve(cwd, tempRelative);
+    aliasMap.set(aliasKey, { resolvedBase, isGlob });
+  }
+
+  return {
+    name: "tsconfig-paths",
+    setup(b) {
+      b.onResolve({ filter: /^@/ }, (args) => {
+        for (const [aliasKey, { resolvedBase, isGlob }] of aliasMap) {
+          if (isGlob) {
+            if (args.path.startsWith(aliasKey + "/")) {
+              const suffix = args.path.slice(aliasKey.length + 1);
+              return { path: path.join(resolvedBase, suffix) };
+            }
+          } else {
+            if (args.path === aliasKey) {
+              return { path: resolvedBase };
+            }
+          }
+        }
+        return undefined;
+      });
+    },
+  };
+};
+
+/**
  * Esbuild plugin that converts JSON5 to JSON before bundling
  */
 const json5Plugin = () => {
@@ -219,6 +277,8 @@ async function main() {
       keepNames: settings.debug,
       jsx: "automatic",
       ...(jsxImportSource && { jsxImportSource }),
+      // Let esbuild resolve tsconfig path aliases (e.g. @bedrock-core/ui, user data paths)
+      tsconfig: tsconfigPath,
       // Mark Minecraft modules as external (provided by the game at runtime)
       external: [
         "@minecraft/server",
@@ -244,7 +304,8 @@ async function main() {
       console.log("   Minification: disabled");
     }
 
-    await build({ ...buildOptions, plugins: [json5Plugin()] }).catch((err) => {
+    const tsconfigPaths = tsconfig.compilerOptions?.paths ?? {};
+    await build({ ...buildOptions, plugins: [tsconfigPathsPlugin(tsconfigPaths), json5Plugin()] }).catch((err) => {
       console.error("❌ Build error:", err.message);
       process.exit(1);
     });

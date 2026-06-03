@@ -4,7 +4,7 @@ A Regolith filter that generates a JSON mapping of item identifiers to their Bed
 
 ## Overview
 
-Bedrock's JSON UI uses Aux IDs to render items. This filter produces `BP/scripts/data/itemAuxMap.generated.json` at build time so your addon scripts can look up any item's Aux ID without hardcoding values.
+Bedrock's JSON UI uses Aux IDs to render items. This filter produces `data/item-aux/itemAuxMap.generated.json` at build time so your addon scripts can look up any item's Aux ID without hardcoding values.
 
 Aux formula: `aux = item_id * 65536`
 
@@ -50,38 +50,46 @@ Then add it to your `config.json` **before** the `bundler` filter:
 
 ## Usage in addon scripts
 
-The generated file is a plain JSON object. Import it directly in TypeScript — esbuild bundles it into `main.js`:
+Wrap your UI root with `ItemAuxProvider` — no props needed, data is loaded and calibrated automatically:
 
-```ts
-import itemAuxMap from './data/itemAuxMap.generated.json';
+```tsx
+import { ItemAuxProvider } from '@bedrock-core/ui';
 
-const aux = itemAuxMap['minecraft:diamond_sword']; // → 184549376
-const customAux = itemAuxMap['myaddon:cool_sword']; // → e.g. 54329344
+render(
+  <ItemAuxProvider>
+    <MyInventory />
+  </ItemAuxProvider>,
+  player,
+);
 ```
 
-For type safety, import the `ItemAuxMap` type from `@bedrock-core/ui`:
+Pass `data` explicitly to override the default source:
 
-```ts
-import type { ItemAuxMap } from '@bedrock-core/ui';
-import rawMap from './data/itemAuxMap.generated.json';
+```tsx
+import itemAuxData from '@bedrock-core/generated/item-aux';
 
-const itemAuxMap = rawMap as ItemAuxMap;
+<ItemAuxProvider data={itemAuxData}>
+  <MyInventory />
+</ItemAuxProvider>
 ```
 
-### TypeScript ambient declaration
+### TypeScript setup
 
-The generated JSON is not committed to version control, so TypeScript will error on the import in a fresh checkout or before the first Regolith run. Fix this by creating an ambient module declaration next to the import:
+On `regolith install`, the filter copies an `itemAuxMap.generated.d.ts` declaration into your project's `data/item-aux/` folder. Commit this file — TypeScript uses it as a fallback before Regolith runs.
 
-**`BP/scripts/data/itemAuxMap.generated.d.ts`**
+Add the following path alias to your `tsconfig.json` so TypeScript and the bundler resolve the `@bedrock-core/generated/item-aux` alias used internally by `ItemAuxProvider`:
 
-```ts
-declare module '*/itemAuxMap.generated.json' {
-	const value: Record<string, number>;
-	export default value;
+```json
+{
+  "compilerOptions": {
+    "paths": {
+      "@bedrock-core/generated/item-aux": [
+        "./packs/data/item-aux/itemAuxMap.generated.json"
+      ]
+    }
+  }
 }
 ```
-
-Commit this file. TypeScript uses it as a fallback when the JSON doesn't exist yet; once Regolith generates the real file, the bundler reads the actual JSON.
 
 ## Custom items
 
@@ -131,8 +139,9 @@ The cache is refreshed when it is older than `cacheMaxAgeHours` (default: 24 hou
 |---|---|---|---|
 | `itemsUrl` | `string` | Mojang bedrock-samples URL | URL to fetch vanilla item metadata from |
 | `cacheMaxAgeHours` | `number` | `24` | Hours before the vanilla cache is considered stale |
-| `outputPath` | `string` | `BP/scripts/data/itemAuxMap.generated.json` | Output path relative to the Regolith temp directory |
+| `outputPath` | `string` | `data/item-aux/itemAuxMap.generated.json` | Output path relative to the Regolith temp directory |
 | `blockBaseOffset` | `number` | `8621` | Offset added to `\|minVanillaId\|` to compute the custom block base. Increase by N if custom blocks render at wrong IDs after loading a new pack that registers additional blocks before yours |
+| `shiftThreshold` | `integer` | `632` | Vanilla items with `raw_id ≥ shiftThreshold` are listed in the companion `itemMetadata.generated.json` as `correctableItems`. The addon script reads this at runtime and corrects their aux values when developer-build items (absent from the public API) are detected. `632` is the empirically-confirmed first affected raw_id. |
 
 Example with explicit settings:
 
@@ -153,6 +162,17 @@ Example with explicit settings:
 4. Custom item identifiers are sorted alphabetically and assigned sequential IDs starting from 257.
 5. It reads `RP/textures/terrain_texture.json` (if present), collects non-`minecraft:` namespaced keys, sorts them in **reverse alphabetical order**, and assigns large negative IDs starting at `-(customBlockBase)`.
 6. Vanilla, custom item, and custom block entries are merged and written to `outputPath`.
+7. A companion `itemMetadata.generated.json` is written to the same directory. It contains the full list of known vanilla typeIds and the subset of vanilla items whose `raw_id ≥ shiftThreshold` (`correctableItems`). The addon script reads this at runtime to detect and correct any displacement caused by developer-build items.
+
+### Runtime calibration
+
+Developer builds of Bedrock sometimes include items that are absent from the public `bedrock-samples` API. These items occupy raw_id slots and displace all subsequent vanilla items. `ItemAuxProvider` corrects for this automatically via `getCalibratedAuxMap` (exported from `@bedrock-core/ui`):
+
+1. On first render it calls `ItemTypes.getAll()` (from `@minecraft/server`).
+2. It counts how many registered `minecraft:` items are **not** in the generated map — these are developer-only extras.
+3. If the count is non-zero it adds `extraCount × 65536` to every item at or above `correctionBoundaryAux`.
+
+On a normal public build the extra count is 0 and the map is returned unchanged. No configuration is required.
 
 ## Troubleshooting
 
@@ -169,8 +189,15 @@ Example with explicit settings:
 - [Bedrock Wiki — JSON UI: item-id-aux](https://wiki.bedrock.dev/json-ui/json-ui-documentation#item-id-aux-item-id-aux) — how aux IDs are used in JSON UI
 - [Bedrock Wiki — Numerical Item IDs](https://wiki.bedrock.dev/items/numerical-item-ids) — ID ranges for vanilla, old-format, and new-format custom items
 - [Mojang bedrock-samples — mojang-items.json](https://raw.githubusercontent.com/Mojang/bedrock-samples/refs/heads/main/metadata/vanilladata_modules/mojang-items.json) — official vanilla item metadata (source for `raw_id` values)
+- [Bedrock Add-Ons Discord server, msg by yasser444](https://discord.com/channels/523663022053392405/1067870274894172260/1402731495944359999) — how to get aux id of custom blocks
 
 ## Changelog
+
+### 1.3.0
+
+- Added companion `itemMetadata.generated.json` output containing `allVanillaTypeIds` and `correctableItems` (vanilla items with `raw_id ≥ shiftThreshold`).
+- Added `shiftThreshold` setting (default `632`) controlling which items are listed as correctable.
+- Added `BP/scripts/data/calibratedAuxMap.ts` (consumer side) — detects developer-build extra items via `ItemTypes.getAll()` at runtime and applies a correction of `+N × 65536` to all correctable items, where N is the count of detected extras. Normal/public builds are unaffected (correction is 0).
 
 ### 1.2.0
 

@@ -6,7 +6,7 @@ A Regolith filter that generates a JSON mapping of translation keys to their res
 
 The `@bedrock-core/ui` serialization protocol has an 80-byte limit on string fields. Longer strings must use Minecraft's localization key system instead — the key is serialized (it's always short) and the RP's `localize: true` setting resolves it at display time.
 
-This filter produces `BP/scripts/data/translationKeys.generated.json` at build time so the ui-runtime can look up the full display string for layout calculations (word-wrap, ellipsis, `measureText`).
+This filter produces `data/translation-keys/translationKeys.generated.json` at build time so the ui-runtime can look up the full display string for layout calculations (word-wrap, ellipsis, `measureText`).
 
 Merge order (later entries override earlier ones):
 
@@ -45,16 +45,15 @@ Then add it to your `config.json` **before** the `bundler` filter:
 
 ## Usage in addon scripts
 
-Import the generated JSON and provide it through `TranslationKeysContext` at the root of your UI:
+Wrap your UI root with `TranslationKeysProvider` — no props needed, data is loaded automatically:
 
-```ts
-import translationKeys from './data/translationKeys.generated.json';
-import { TranslationKeysContext } from '@bedrock-core/ui';
+```tsx
+import { TranslationKeysProvider } from '@bedrock-core/ui';
 
 render(
-  <TranslationKeysContext value={translationKeys}>
+  <TranslationKeysProvider>
     <MyScreen />
-  </TranslationKeysContext>,
+  </TranslationKeysProvider>,
   player,
 );
 ```
@@ -77,20 +76,33 @@ ui.myscreen.description=Aliqua velit laborum ullamco dolor ullamco occaecat nisi
 
 Short strings (under 80 UTF-8 bytes) can continue to use `children` as before — both forms are supported on the same `Text` component.
 
-### TypeScript ambient declaration
+Pass `data` explicitly to override the default source:
 
-The generated JSON is not committed to version control. To let TypeScript resolve the import before Regolith runs, create an ambient module declaration next to where you import the file:
+```tsx
+import translationKeys from '@bedrock-core/generated/translation-keys';
 
-**`BP/scripts/data/translationKeys.generated.d.ts`**
-
-```ts
-declare module '*/translationKeys.generated.json' {
-  const value: Record<string, string>;
-  export default value;
-}
+<TranslationKeysProvider data={translationKeys}>
+  <MyScreen />
+</TranslationKeysProvider>
 ```
 
-Commit this file. TypeScript uses it as a fallback when the JSON doesn't exist yet (e.g. in CI or a fresh checkout). Once Regolith generates the real file, the bundler reads the actual JSON — the declaration only affects type-checking.
+### TypeScript setup
+
+On `regolith install`, the filter copies a `translationKeys.generated.d.ts` declaration into your project's `data/translation-keys/` folder. Commit this file — TypeScript uses it as a fallback before Regolith runs.
+
+Add the following path alias to your `tsconfig.json` so TypeScript and the bundler resolve the `@bedrock-core/generated/translation-keys` alias used internally by `TranslationKeysProvider`:
+
+```json
+{
+  "compilerOptions": {
+    "paths": {
+      "@bedrock-core/generated/translation-keys": [
+        "./packs/data/translation-keys/translationKeys.generated.json"
+      ]
+    }
+  }
+}
+```
 
 ## Runtime errors
 
@@ -109,7 +121,7 @@ Both errors are exported from `@bedrock-core/ui` as `TranslationKeysError` so yo
 |---|---|---|---|
 | `vanillaLangUrl` | `string` | Mojang bedrock-samples URL | URL to fetch vanilla `en_US.lang` from |
 | `cacheMaxAgeHours` | `number` | `24` | Hours before the vanilla cache is considered stale |
-| `outputJsonPath` | `string` | `BP/scripts/data/translationKeys.generated.json` | Output path for the JSON map, relative to the Regolith temp directory |
+| `outputJsonPath` | `string` | `data/translation-keys/translationKeys.generated.json` | Output path for the JSON map, relative to the Regolith temp directory |
 | `langFiles` | `string[]` | `["RP/texts/en_US.lang", "BP/texts/en_US.lang"]` | Pack lang files to merge on top of vanilla, in order |
 
 Example with explicit settings:
