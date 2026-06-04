@@ -60,12 +60,12 @@ const defaults = {
     cacheMaxAgeHours: 24,
     outputPath: 'data/item-aux/itemAuxMap.generated.json',
     blockBaseOffset: 8621,
-    // Vanilla items with raw_id >= shiftThreshold may have their actual game
-    // raw_id displaced by developer-only items that aren't in the public API.
-    // The companion itemMetadata.generated.json lists these items so the addon
-    // script can detect and correct the offset at runtime via ItemTypes.getAll().
-    // 632 is the empirically-confirmed first raw_id that differs between the
-    // public bedrock-samples and developer Bedrock builds.
+    // Vanilla items with raw_id >= shiftThreshold may be displaced by
+    // developer-only items absent from the public API. shiftThreshold is used
+    // to compute correctionBoundaryAux (written into itemAuxMap.generated.json)
+    // so the runtime can add extraCount × 65536 to all items at or above the
+    // boundary. 632 is the empirically-confirmed first raw_id that differs
+    // between bedrock-samples and developer Bedrock builds.
     shiftThreshold: 632,
 };
 

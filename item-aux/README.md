@@ -131,7 +131,7 @@ The cache is refreshed when it is older than `cacheMaxAgeHours` (default: 24 hou
 | `cacheMaxAgeHours` | `number` | `24` | Hours before the vanilla cache is considered stale |
 | `outputPath` | `string` | `data/item-aux/itemAuxMap.generated.json` | Output path relative to the Regolith temp directory |
 | `blockBaseOffset` | `number` | `8621` | Offset added to `\|minVanillaId\|` to compute the custom block base. Increase by N if custom blocks render at wrong IDs after loading a new pack that registers additional blocks before yours |
-| `shiftThreshold` | `integer` | `632` | Vanilla items with `raw_id ≥ shiftThreshold` are listed in the companion `itemMetadata.generated.json` as `correctableItems`. The addon script reads this at runtime and corrects their aux values when developer-build items (absent from the public API) are detected. `632` is the empirically-confirmed first affected raw_id. |
+| `shiftThreshold` | `integer` | `632` | First `raw_id` that may be displaced by developer-build items absent from the public API. Used to compute `correctionBoundaryAux = (shiftThreshold + customItemCount) × 65536`, which is embedded in `itemAuxMap.generated.json`. At runtime `getCalibratedAuxMap` adds `extraCount × 65536` to all items with aux ≥ this boundary. `632` is the empirically-confirmed first affected raw_id. |
 
 Example with explicit settings:
 
@@ -152,7 +152,7 @@ Example with explicit settings:
 4. Custom item identifiers are sorted alphabetically and assigned sequential IDs starting from 257.
 5. It reads `RP/textures/terrain_texture.json` (if present), collects non-`minecraft:` namespaced keys, sorts them in **reverse alphabetical order**, and assigns large negative IDs starting at `-(customBlockBase)`.
 6. Vanilla, custom item, and custom block entries are merged and written to `outputPath`.
-7. A companion `itemMetadata.generated.json` is written to the same directory. It contains the full list of known vanilla typeIds and the subset of vanilla items whose `raw_id ≥ shiftThreshold` (`correctableItems`). The addon script reads this at runtime to detect and correct any displacement caused by developer-build items.
+7. `correctionBoundaryAux = (shiftThreshold + customItemCount) × 65536` is computed and written into the output JSON alongside the item map. At runtime `getCalibratedAuxMap` uses this boundary to apply a correction of `+extraCount × 65536` to all items with aux ≥ the boundary.
 
 ### Runtime calibration
 
@@ -185,9 +185,8 @@ On a normal public build the extra count is 0 and the map is returned unchanged.
 
 ### 1.3.0
 
-- Added companion `itemMetadata.generated.json` output containing `allVanillaTypeIds` and `correctableItems` (vanilla items with `raw_id ≥ shiftThreshold`).
-- Added `shiftThreshold` setting (default `632`) controlling which items are listed as correctable.
-- Runtime calibration logic (`getCalibratedAuxMap`) ships as part of `@bedrock-core/ui-runtime` and runs automatically at the render root — it detects developer-build extra items via `ItemTypes.getAll()` at runtime and applies a correction of `+N × 65536` to all correctable items, where N is the count of detected extras. Normal/public builds are unaffected (correction is 0).
+- Added `shiftThreshold` setting (default `632`) and `correctionBoundaryAux` output field to `itemAuxMap.generated.json`. `correctionBoundaryAux` is the lowest aux value that belongs to a vanilla item that may be displaced by developer-build extras, computed as `(shiftThreshold + customItemCount) × 65536`.
+- Runtime calibration logic (`getCalibratedAuxMap`) ships as part of `@bedrock-core/ui-runtime` and runs automatically at the render root — it detects developer-build extra items via `ItemTypes.getAll()` and applies a correction of `+N × 65536` to all items with aux ≥ `correctionBoundaryAux`, where N is the count of detected extras. Normal/public builds are unaffected (correction is 0).
 
 ### 1.2.0
 

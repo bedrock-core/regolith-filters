@@ -27,7 +27,7 @@
     "shiftThreshold": {
       "type": "integer",
       "default": 632,
-      "description": "Vanilla items with raw_id >= this value are listed in itemMetadata.generated.json as 'correctableItems'. The addon script uses this list at runtime to apply a correction when developer-build items (absent from the public API) displace the raw_ids of these items. The default 632 is the empirically-confirmed first affected raw_id."
+      "description": "First raw_id that may be displaced by developer-build items absent from the public API. Used to compute correctionBoundaryAux = (shiftThreshold + customItemCount) * 65536, which is embedded in the output JSON. The runtime adds extraCount * 65536 to all items with aux >= correctionBoundaryAux. Default 632 is the empirically-confirmed first affected raw_id."
     }
   }
 }
