@@ -1,6 +1,0 @@
-{
-  "name": "@bedrock-core/regolith-filters_item-aux",
-  "version": "1.3.0",
-  "description": "Regolith filter that generates an itemAuxMap.generated.json file from Mojang vanilla item data and custom items.",
-  "packageManager": "yarn@4.9.4"
-}
