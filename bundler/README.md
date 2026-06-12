@@ -114,6 +114,10 @@ The following Minecraft modules are automatically marked as external (not bundle
 
 ## Changelog
 
+### 1.1.0
+
+- Automatic JSX transform — the filter now reads `jsxImportSource` from your `tsconfig.json` (or its `extends` chain) and configures esbuild's JSX transform automatically. No manual esbuild options are needed when using `@bedrock-core/ui` or any other JSX runtime.
+
 ### 1.0.1
 
 - Fixed folders not being removed after bundling
