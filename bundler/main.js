@@ -129,17 +129,17 @@ if (settings.debug) {
 function loadTsConfig() {
   try {
     const result = getTsconfig(tsconfigPath);
-    
+
     if (!result) {
       console.error(`❌ Failed to load tsconfig.json at: ${tsconfigPath}`);
       process.exit(1);
     }
-    
+
     console.log('✅ Loaded tsconfig.json from', tsconfigPath);
     if (result.config.extends) {
       console.log('   Extended from:', result.config.extends);
     }
-    
+
     return result.config;
   } catch (error) {
     console.error("❌ Failed to parse tsconfig.json:", error);
@@ -272,6 +272,12 @@ async function main() {
       format: "esm",
       target: tsconfig.compilerOptions?.target?.toLowerCase() || "es2020",
       platform: "neutral",
+      // platform:"neutral" is correct for the Bedrock script engine (no Node/browser globals), but it
+      // also clears esbuild's mainFields to [], so only packages exposing an "exports" map resolve (our
+      // workspace packages do; plain npm libs like cannon-es, which ship only main/module, don't). Restore
+      // main/module resolution, preferring the ESM build ("module") so esbuild can tree-shake it. The
+      // "exports" field still wins when present, so workspace packages are unaffected.
+      mainFields: ["module", "main"],
       minify: !settings.debug,
       sourcemap: settings.debug,
       keepNames: settings.debug,
