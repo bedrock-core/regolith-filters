@@ -1,0 +1,10 @@
+{
+	"description": "Compiles MDX guide content into a guide IR manifest and auto-localized .lang entries for rendering with @bedrock-core/guides.",
+	"filters": [
+		{
+			"name": "Compile MDX Guides",
+			"runWith": "nodejs",
+			"script": "./main.js"
+		}
+	]
+}

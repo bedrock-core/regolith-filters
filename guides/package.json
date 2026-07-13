@@ -1,0 +1,25 @@
+{
+  "name": "@bedrock-core/regolith-filters_guides",
+  "version": "1.0.0",
+  "description": "Regolith filter that compiles MDX guide content into a guide IR manifest and auto-localized .lang entries for @bedrock-core/guides.",
+  "type": "module",
+  "packageManager": "yarn@4.9.4",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "mdast-util-definitions": "^6.0.0",
+    "mdast-util-to-string": "^4.0.0",
+    "picomatch": "^4.0.2",
+    "remark-directive": "^4.0.0",
+    "remark-frontmatter": "^5.0.0",
+    "remark-gfm": "^4.0.1",
+    "remark-mdx": "^3.1.0",
+    "remark-parse": "^11.0.0",
+    "unified": "^11.0.5",
+    "yaml": "^2.8.0"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.5"
+  }
+}

@@ -14,6 +14,7 @@ regolith config resolvers --append github.com/bedrock-core/regolith-filters/reso
 |--------|-------------|
 | [**bundler**](./bundler/README.md) | Bundles TypeScript from `BP/scripts/` into a single `main.js` using esbuild. Respects `tsconfig.json`, marks Minecraft modules as external, and optionally emits source maps in debug mode. |
 | [**generator**](./generator/README.md) | Transpiles `.ts` template files in `BP/` and `RP/` into JSON output files. Supports single-file and multi-file (array) generation patterns. |
+| [**guides**](./guides/README.md) | Compiles MDX guide content (`data/guide/<locale>/**`) into a guide IR manifest plus auto-localized `.lang` entries, rendered in-game by `@bedrock-core/guides`. Must run **before** translation-keys. |
 | [**translation-keys**](./translation-keys/README.md) | Generates a JSON map of translation keys to resolved display strings by merging vanilla `en_US.lang` with your pack lang files. |
 
 ## Removed Filters

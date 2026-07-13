@@ -7,6 +7,9 @@
     "generator": {
       "url": "github.com/bedrock-core/regolith-filters/generator"
     },
+    "guides": {
+      "url": "github.com/bedrock-core/regolith-filters/guides"
+    },
     "translation-keys": {
       "url": "github.com/bedrock-core/regolith-filters/translation-keys"
     }

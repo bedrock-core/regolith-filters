@@ -1,0 +1,119 @@
+// Locale build + manifest assembly — pure (no filesystem); main.js feeds it
+// file contents and receives structures to write.
+
+import { ADMONITION_COLORS, compilePage } from './compile.js';
+import { resolveInternalLink } from './inline.js';
+import { admKey, catKey, pageKey } from './keys.js';
+import { humanizeFilename, parseGuideFile } from './parse.js';
+import { buildSidebar } from './sidebar.js';
+
+/**
+ * Default admonition titles (kind color+bold baked into the value — titles
+ * render through localizationKey, which can't carry a § prefix).
+ * English-only in v1 — other locales inherit via fallback fill.
+ */
+export const ADMONITION_TITLES = {
+  note: `${ADMONITION_COLORS.note}§lNote`,
+  tip: `${ADMONITION_COLORS.tip}§lTip`,
+  info: `${ADMONITION_COLORS.info}§lInfo`,
+  warning: `${ADMONITION_COLORS.warning}§lWarning`,
+  danger: `${ADMONITION_COLORS.danger}§lDanger`,
+};
+
+/**
+ * Compile every page of one locale.
+ *
+ * @param {object} input
+ * @param {Map<string, string>} input.files       PageId → MDX source
+ * @param {Map<string, object>} input.categories  dirPath → parsed _category_.json
+ * @param {string} input.prefix                   'bcg.<ns>'
+ * @param {number} input.maxCodeLineBytes
+ * @param {Set<string>} [input.linkTargets]       valid link targets (defaults to this locale's own pages;
+ *                                                pass the default locale's set when compiling translations)
+ * @param {(src: string) => {w: number, h: number} | undefined} [input.imageSize]
+ * @param {{ warn(scope: string, msg: string): void, error(scope: string, msg: string): void }} input.report
+ * @returns {{ pages: Map<string, object>, lang: Map<string, string>, pageIds: Set<string> }}
+ */
+export function buildLocale({ files, categories, prefix, maxCodeLineBytes, linkTargets, imageSize, report }) {
+  const pageIds = new Set(files.keys());
+  const targets = linkTargets ?? pageIds;
+  const pages = new Map();
+  const lang = new Map();
+
+  for (const pageId of [...files.keys()].sort()) {
+    let parsed;
+    try {
+      parsed = parseGuideFile(files.get(pageId));
+    } catch (err) {
+      report.error(pageId, `parse error: ${err instanceof Error ? err.message : String(err)}`);
+      continue;
+    }
+
+    const dir = pageId.includes('/') ? pageId.slice(0, pageId.lastIndexOf('/')) : '';
+    const basename = pageId.slice(pageId.lastIndexOf('/') + 1);
+
+    const result = compilePage(parsed.root, {
+      frontmatter: parsed.frontmatter,
+      key: (nodePath) => pageKey(prefix, pageId, nodePath),
+      resolveLink: (url) => resolveInternalLink(url, dir, targets),
+      getDefinition: parsed.getDefinition,
+      imageSize,
+      warn: (msg) => report.warn(pageId, msg),
+      error: (msg) => report.error(pageId, msg),
+      maxCodeLineBytes,
+      fallbackTitle: humanizeFilename(basename),
+    });
+
+    pages.set(pageId, { frontmatter: parsed.frontmatter, titleK: result.titleK, blocks: result.blocks });
+    for (const [key, value] of result.lang) lang.set(key, value);
+  }
+
+  // Category labels ride the locale's .lang so translated sidebars work.
+  for (const [dirPath, category] of categories) {
+    if (typeof category.label === 'string') {
+      lang.set(catKey(prefix, dirPath), category.label);
+    }
+  }
+
+  return { pages, lang, pageIds };
+}
+
+/**
+ * Assemble the manifest from the default locale's build. Also mints the
+ * sidebar `_cat` labels and `_adm` defaults into that build's lang map.
+ *
+ * @param {object} input
+ * @param {{ pages: Map<string, object>, lang: Map<string, string> }} input.build  default-locale build
+ * @param {Map<string, object>} input.categories
+ * @param {string} input.prefix
+ * @param {string} input.ns
+ * @param {string} input.defaultLocale
+ * @param {string[]} input.locales
+ * @param {{ warn(scope: string, msg: string): void }} input.report
+ */
+export function buildManifest({ build, categories, prefix, ns, defaultLocale, locales, report }) {
+  const { tree, order } = buildSidebar({
+    pages: build.pages,
+    categories,
+    prefix,
+    addLang: (key, value) => {
+      if (!build.lang.has(key)) build.lang.set(key, value);
+    },
+    warn: (msg) => report.warn('sidebar', msg),
+  });
+
+  for (const [kind, title] of Object.entries(ADMONITION_TITLES)) {
+    build.lang.set(admKey(prefix, kind), title);
+  }
+
+  const pages = {};
+  for (const [pageId, page] of build.pages) {
+    pages[pageId] = { id: pageId, titleK: page.titleK, blocks: page.blocks };
+  }
+  order.forEach((pageId, i) => {
+    if (i > 0) pages[pageId].prev = order[i - 1];
+    if (i < order.length - 1) pages[pageId].next = order[i + 1];
+  });
+
+  return { v: 1, ns, defaultLocale, locales, tree, pages };
+}

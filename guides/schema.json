@@ -1,0 +1,50 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema",
+  "$id": "core-guides",
+  "type": "object",
+  "description": "Regolith filter that compiles MDX guide content (data/guide/<locale>/**) into a guide IR manifest plus auto-localized .lang entries.",
+  "required": ["keyPrefix"],
+  "properties": {
+    "keyPrefix": {
+      "type": "string",
+      "description": "Addon namespace used in generated localization keys (bcg.<keyPrefix>.*). Required."
+    },
+    "sourceDir": {
+      "type": "string",
+      "default": "data/guide",
+      "description": "Guide content root, relative to the Regolith temp directory. Direct children are locale folders (en_US, es_ES, ...)."
+    },
+    "defaultLocale": {
+      "type": "string",
+      "default": "en_US",
+      "description": "Locale that defines document structure, keys, sidebar, and fallback values. Must exist under sourceDir."
+    },
+    "include": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": ["**/*.md", "**/*.mdx"],
+      "description": "Glob patterns (relative to each locale folder) selecting guide pages."
+    },
+    "exclude": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "Glob patterns excluding pages matched by include."
+    },
+    "manifestPath": {
+      "type": "string",
+      "default": "data/guides/guides.generated.json",
+      "description": "Output path for the guide IR manifest, relative to the Regolith temp directory."
+    },
+    "maxCodeLineBytes": {
+      "type": "number",
+      "default": 60,
+      "description": "Hard-wrap budget (UTF-8 bytes) for code block lines — code is raw un-localized text, which the runtime caps at 80 bytes."
+    },
+    "strictLocales": {
+      "type": "boolean",
+      "default": false,
+      "description": "Fail the build (instead of warning) when a locale's keys drift from the default locale."
+    }
+  }
+}
