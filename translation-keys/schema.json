@@ -2,28 +2,35 @@
   "$schema": "http://json-schema.org/draft-07/schema",
   "$id": "core-translation-keys",
   "type": "object",
-  "description": "Regolith filter that generates translationKeys.generated.json by merging vanilla bedrock-samples translations with pack .lang files.",
+  "description": "Regolith filter that generates translationKeys.generated.json — one JSON object nested by locale — by merging vanilla bedrock-samples translations with pack .lang files, per configured locale.",
   "properties": {
-    "vanillaLangUrl": {
+    "locales": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "default": ["en_US"],
+      "description": "Locale codes to generate a translation map for (e.g. [\"en_US\", \"es_ES\"]). Each locale gets its own merged map, nested under its code in the output JSON."
+    },
+    "vanillaLangUrlTemplate": {
       "type": "string",
-      "default": "https://raw.githubusercontent.com/Mojang/bedrock-samples/refs/heads/main/resource_pack/texts/en_US.lang",
-      "description": "URL to fetch the vanilla en_US.lang file from."
+      "default": "https://raw.githubusercontent.com/Mojang/bedrock-samples/refs/heads/main/resource_pack/texts/{locale}.lang",
+      "description": "URL template to fetch each locale's vanilla .lang file from. \"{locale}\" is replaced with the locale code."
     },
     "cacheMaxAgeHours": {
       "type": "number",
       "default": 24,
-      "description": "How long (in hours) to keep the cached vanilla .lang file before re-fetching."
+      "description": "How long (in hours) to keep each locale's cached vanilla .lang file before re-fetching."
     },
     "outputJsonPath": {
       "type": "string",
       "default": "data/translation-keys/translationKeys.generated.json",
-      "description": "Output path for the generated JSON map (key → resolved string), relative to the Regolith temp directory."
+      "description": "Output path for the generated JSON map (locale → key → resolved string), relative to the Regolith temp directory."
     },
-    "langFiles": {
+    "langFilesTemplate": {
       "type": "array",
       "items": { "type": "string" },
-      "default": ["RP/texts/en_US.lang", "BP/texts/en_US.lang"],
-      "description": "Pack .lang files to merge on top of vanilla (in order). Relative to the Regolith temp directory. Later files override earlier ones."
+      "default": ["RP/texts/{locale}.lang", "BP/texts/{locale}.lang"],
+      "description": "Pack .lang file path templates to merge on top of vanilla (in order) for each locale. \"{locale}\" is replaced with the locale code. Relative to the Regolith temp directory. Later files override earlier ones."
     }
   }
 }

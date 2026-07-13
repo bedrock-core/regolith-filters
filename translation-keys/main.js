@@ -1,12 +1,16 @@
 // @bedrock-core/regolith-filters — translation-keys
-// Generates data/translation-keys/translationKeys.generated.json with merged translations.
+// Generates data/translation-keys/translationKeys.generated.json: one JSON object
+// nested by locale, each value a merged translation map for that locale.
 //
-// Merge order (later entries override earlier ones):
-//   1. Vanilla en_US.lang from Mojang's bedrock-samples GitHub (cached)
-//   2. Pack RP/texts/en_US.lang
-//   3. Pack BP/texts/en_US.lang
+// Per locale, merge order (later entries override earlier ones):
+//   1. Vanilla <locale>.lang from Mojang's bedrock-samples GitHub (cached)
+//   2. Pack RP/texts/<locale>.lang
+//   3. Pack BP/texts/<locale>.lang
 //
-// Also writes the merged RP/texts/en_US.lang so the delivered RP contains all keys.
+// Bedrock script bundles are static (no dynamic per-player import), so every
+// configured locale's map ships in the one generated module — the addon
+// script picks the right sub-map at runtime (e.g. via a player's preferred
+// language) and passes it to TranslationKeysContext.
 
 'use strict';
 
@@ -28,25 +32,36 @@ if (!projectRoot) {
 // Settings
 // ---------------------------------------------------------------------------
 
-const VANILLA_LANG_URL =
-    'https://raw.githubusercontent.com/Mojang/bedrock-samples/refs/heads/main/resource_pack/texts/en_US.lang';
+const VANILLA_LANG_URL_TEMPLATE =
+    'https://raw.githubusercontent.com/Mojang/bedrock-samples/refs/heads/main/resource_pack/texts/{locale}.lang';
 
 const defaults = {
-    vanillaLangUrl: VANILLA_LANG_URL,
+    locales: ['en_US'],
+    vanillaLangUrlTemplate: VANILLA_LANG_URL_TEMPLATE,
     cacheMaxAgeHours: 24,
     outputJsonPath: 'data/translation-keys/translationKeys.generated.json',
-    langFiles: ['RP/texts/en_US.lang', 'BP/texts/en_US.lang'],
+    langFilesTemplate: ['RP/texts/{locale}.lang', 'BP/texts/{locale}.lang'],
 };
 
 const argParsed = process.argv[2] ? JSON.parse(process.argv[2]) : {};
 const settings = Object.assign({}, defaults, argParsed);
 
+if (!Array.isArray(settings.locales) || settings.locales.length === 0) {
+    console.error('❌ settings.locales must be a non-empty array of locale codes (e.g. ["en_US"])');
+    process.exit(1);
+}
+
 // ---------------------------------------------------------------------------
 // Paths
 // ---------------------------------------------------------------------------
 
-const cacheFile = path.join(projectRoot, '.regolith', 'cache', 'translation-keys', 'vanilla-en_US.lang.cache');
+const cacheDir = path.join(projectRoot, '.regolith', 'cache', 'translation-keys');
 const outputJsonPath = path.join(process.cwd(), settings.outputJsonPath);
+
+/** @param {string} template @param {string} locale */
+function fillLocale(template, locale) {
+    return template.replaceAll('{locale}', locale);
+}
 
 // ---------------------------------------------------------------------------
 // Logging
@@ -55,6 +70,7 @@ const outputJsonPath = path.join(process.cwd(), settings.outputJsonPath);
 console.log('🌐 @bedrock-core/translation-keys');
 console.log('📂 Project root:', projectRoot);
 console.log('📂 Working directory:', process.cwd());
+console.log('🈯 Locales:', settings.locales.join(', '));
 
 // ---------------------------------------------------------------------------
 // .lang file parsing
@@ -92,56 +108,60 @@ function parseLang(content) {
 }
 
 // ---------------------------------------------------------------------------
-// Vanilla lang fetching (with cache)
+// Vanilla lang fetching (with cache, one file per locale)
 // ---------------------------------------------------------------------------
 
-/** @returns {Promise<string>} raw .lang file content */
-async function fetchVanillaLang() {
+/** @param {string} locale @returns {Promise<string>} raw .lang file content */
+async function fetchVanillaLang(locale) {
+    const url = fillLocale(settings.vanillaLangUrlTemplate, locale);
+    const cacheFile = path.join(cacheDir, `vanilla-${locale}.lang.cache`);
+
     if (fs.existsSync(cacheFile)) {
         const stat = fs.statSync(cacheFile);
         const ageHours = (Date.now() - stat.mtimeMs) / (1000 * 60 * 60);
 
         if (ageHours < settings.cacheMaxAgeHours) {
-            console.log(`✅ Using cached vanilla en_US.lang (age: ${ageHours.toFixed(1)}h)`);
+            console.log(`✅ [${locale}] Using cached vanilla lang (age: ${ageHours.toFixed(1)}h)`);
             return fs.readFileSync(cacheFile, 'utf-8');
         }
 
-        console.log(`⏳ Cache expired (${ageHours.toFixed(1)}h old), re-fetching...`);
+        console.log(`⏳ [${locale}] Cache expired (${ageHours.toFixed(1)}h old), re-fetching...`);
     } else {
-        console.log(`⏳ Fetching vanilla en_US.lang from ${settings.vanillaLangUrl} ...`);
+        console.log(`⏳ [${locale}] Fetching vanilla lang from ${url} ...`);
     }
 
-    const res = await fetch(settings.vanillaLangUrl);
+    const res = await fetch(url);
 
     if (!res.ok) {
-        throw new Error(`HTTP ${res.status} ${res.statusText} — ${settings.vanillaLangUrl}`);
+        throw new Error(`[${locale}] HTTP ${res.status} ${res.statusText} — ${url}`);
     }
 
     const text = await res.text();
 
-    fs.mkdirSync(path.dirname(cacheFile), { recursive: true });
+    fs.mkdirSync(cacheDir, { recursive: true });
     fs.writeFileSync(cacheFile, text, 'utf-8');
-    console.log(`✅ Fetched and cached vanilla en_US.lang`);
+    console.log(`✅ [${locale}] Fetched and cached vanilla lang`);
 
     return text;
 }
 
 // ---------------------------------------------------------------------------
-// Main
+// Per-locale build
 // ---------------------------------------------------------------------------
 
-async function main() {
-    // ── Vanilla translations ──────────────────────────────────────────────────
-    const vanillaContent = await fetchVanillaLang();
+/** @param {string} locale @returns {Promise<Record<string, string>>} */
+async function buildLocale(locale) {
+    const vanillaContent = await fetchVanillaLang(locale);
     const merged = parseLang(vanillaContent);
-    console.log(`ℹ️  Vanilla keys: ${Object.keys(merged).length}`);
+    console.log(`ℹ️  [${locale}] Vanilla keys: ${Object.keys(merged).length}`);
 
-    // ── Pack translations (merge in order) ────────────────────────────────────
-    for (const relPath of settings.langFiles) {
+    const langFiles = settings.langFilesTemplate.map((template) => fillLocale(template, locale));
+
+    for (const relPath of langFiles) {
         const absPath = path.join(process.cwd(), relPath);
 
         if (!fs.existsSync(absPath)) {
-            console.log(`ℹ️  ${relPath} not found — skipped`);
+            console.log(`ℹ️  [${locale}] ${relPath} not found — skipped`);
             continue;
         }
 
@@ -152,22 +172,30 @@ async function main() {
             merged[k] = v;
         }
 
-        console.log(`✅ Merged ${relPath}: ${count} keys`);
+        console.log(`✅ [${locale}] Merged ${relPath}: ${count} keys`);
     }
 
-    const totalKeys = Object.keys(merged).length;
-    console.log(`ℹ️  Total keys after merge: ${totalKeys}`);
+    console.log(`ℹ️  [${locale}] Total keys after merge: ${Object.keys(merged).length}`);
 
-    // ── Write JSON output ─────────────────────────────────────────────────────
     // Sort alphabetically for determinism.
-    const sortedJson = Object.fromEntries(
-        Object.keys(merged).sort().map(k => [k, merged[k]]),
-    );
+    return Object.fromEntries(Object.keys(merged).sort().map((k) => [k, merged[k]]));
+}
+
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
+
+async function main() {
+    /** @type {Record<string, Record<string, string>>} */
+    const byLocale = {};
+
+    for (const locale of settings.locales) {
+        byLocale[locale] = await buildLocale(locale);
+    }
 
     fs.mkdirSync(path.dirname(outputJsonPath), { recursive: true });
-    fs.writeFileSync(outputJsonPath, JSON.stringify(sortedJson, null, '\t'), 'utf-8');
-    console.log(`✅ Written JSON map (${totalKeys} keys) → ${outputJsonPath}`);
-
+    fs.writeFileSync(outputJsonPath, JSON.stringify(byLocale, null, '\t'), 'utf-8');
+    console.log(`✅ Written JSON map (${settings.locales.length} locale${settings.locales.length === 1 ? '' : 's'}) → ${outputJsonPath}`);
 }
 
 main().catch(err => {
