@@ -61,9 +61,12 @@ export function buildSidebar({ pages, categories, prefix, addLang, warn }) {
     for (const pageId of dirPages.get(dirPath) ?? []) {
       const page = pages.get(pageId);
       if (page.frontmatter.hidden === true) continue;
+      const node = { t: 'page', id: pageId, titleK: page.titleK };
+      if (page.icon !== undefined) node.icon = page.icon;
+      if (page.descK !== undefined) node.descK = page.descK;
       entries.push({
         sort: [numberOr(page.frontmatter.sidebar_position, Infinity), pageId],
-        node: { t: 'page', id: pageId, titleK: page.titleK },
+        node,
       });
     }
 
@@ -75,6 +78,7 @@ export function buildSidebar({ pages, categories, prefix, addLang, warn }) {
 
       const node = { t: 'cat', id: childDir, labelK, children: buildDir(childDir) };
       if (category.collapsed === true) node.collapsed = true;
+      if (typeof category.icon === 'string' && category.icon !== '') node.icon = category.icon;
       const link = resolveCategoryLink(childDir, category.link);
       if (link !== undefined) node.link = link;
       if (node.children.length === 0 && node.link === undefined) {

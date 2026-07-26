@@ -1,7 +1,11 @@
 // @bedrock-core/regolith-filters — guides
-// Compiles MDX guide content (data/guide/<locale>/**) into:
-//   1. a guide IR manifest (data/guides/guides.generated.json) consumed by
-//      @bedrock-core/guides via the '@bedrock-core/generated/guides' alias, and
+// Compiles MDX guide content (data/guides/<locale>/**) into:
+//   1. a guide IR manifest (data/guides/guides.generated.json, written in the
+//      Regolith temp workspace — never synced back to the project; the bundler's
+//      tsconfig-paths plugin resolves the packs/data alias against the temp
+//      workspace, and the committed guides.generated.d.ts seeded by
+//      `regolith install` types the module for the IDE) consumed via the
+//      '@bedrock-core/generated/guides' alias, and
 //   2. auto-localized .lang entries (RP/texts/<locale>.lang, marker-delimited
 //      section) — long prose rides localization keys, so the client resolves
 //      text per player language and the runtime's raw-text cap never applies.
@@ -36,7 +40,7 @@ if (!projectRoot) {
 
 const defaults = {
   keyPrefix: '',
-  sourceDir: 'data/guide',
+  sourceDir: 'data/guides',
   defaultLocale: 'en_US',
   include: ['**/*.md', '**/*.mdx'],
   exclude: [],
@@ -178,11 +182,18 @@ function main() {
     return;
   }
 
+  // Locale folders are the only directories here; the filter's own data files
+  // (guides.generated.d.ts, and the .json manifest this run writes) sit beside them.
   const locales = fs
     .readdirSync(sourceRoot, { withFileTypes: true })
     .filter((e) => e.isDirectory())
     .map((e) => e.name)
     .sort();
+
+  if (locales.length === 0) {
+    console.log(`ℹ️  no locale folders under ${settings.sourceDir}/ — no guides to compile`);
+    return;
+  }
 
   if (!locales.includes(settings.defaultLocale)) {
     console.error(`❌ default locale "${settings.defaultLocale}" not found under ${settings.sourceDir}/`);

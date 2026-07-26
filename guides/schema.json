@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema",
   "$id": "core-guides",
   "type": "object",
-  "description": "Regolith filter that compiles MDX guide content (data/guide/<locale>/**) into a guide IR manifest plus auto-localized .lang entries.",
+  "description": "Regolith filter that compiles MDX guide content (data/guides/<locale>/**) into a guide IR manifest plus auto-localized .lang entries.",
   "required": ["keyPrefix"],
   "properties": {
     "keyPrefix": {
@@ -11,8 +11,8 @@
     },
     "sourceDir": {
       "type": "string",
-      "default": "data/guide",
-      "description": "Guide content root, relative to the Regolith temp directory. Direct children are locale folders (en_US, es_ES, ...)."
+      "default": "data/guides",
+      "description": "Guide content root, relative to the Regolith temp directory. Direct children are locale folders (en_US, es_ES, ...); the filter's own data files sit beside them."
     },
     "defaultLocale": {
       "type": "string",

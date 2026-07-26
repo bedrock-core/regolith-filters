@@ -96,4 +96,36 @@ describe('buildManifest', () => {
     expect(cat.link).toBeUndefined();
     expect(report.warnings.some((w) => w.includes('nope'))).toBe(true);
   });
+
+  it('carries a page icon and a §7-baked description subtitle key', () => {
+    const files = new Map([
+      ['intro', '---\ntitle: Introduction\nsidebar_position: 1\nicon: textures/ui/config/guide\ndescription: Start here.\n---\n\nWelcome!\n'],
+      ['plain', '---\ntitle: Plain\nsidebar_position: 2\n---\n\nNo extras.\n'],
+    ]);
+    const { manifest, lang } = build({ files, categories: new Map() });
+
+    const intro = manifest.tree.find((n) => n.id === 'intro');
+    expect(intro.icon).toBe('textures/ui/config/guide');
+    expect(intro.descK).toBe('bcg.demo.intro._desc');
+    expect(lang.get('bcg.demo.intro._desc')).toBe('§7Start here.');
+
+    // A page with neither frontmatter field omits both — the row degrades to text-only.
+    const plain = manifest.tree.find((n) => n.id === 'plain');
+    expect(plain.icon).toBeUndefined();
+    expect(plain.descK).toBeUndefined();
+  });
+
+  it('carries a category icon from _category_.json', () => {
+    const categories = new Map([['getting-started', { label: 'Getting Started', icon: 'textures/ui/config/home' }]]);
+    const { manifest } = build({ categories });
+    const cat = manifest.tree.find((n) => n.t === 'cat');
+    expect(cat.icon).toBe('textures/ui/config/home');
+  });
+
+  it('warns when an icon path exceeds the 80-character serializer limit', () => {
+    const longIcon = `textures/ui/${'x'.repeat(80)}`;
+    const files = new Map([['intro', `---\ntitle: Introduction\nicon: ${longIcon}\n---\n\nHi.\n`]]);
+    const { report } = build({ files, categories: new Map() });
+    expect(report.warnings.some((w) => w.includes('80'))).toBe(true);
+  });
 });

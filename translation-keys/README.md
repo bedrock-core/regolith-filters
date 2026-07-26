@@ -6,7 +6,7 @@ A Regolith filter that generates a JSON mapping of translation keys to their res
 
 The `@bedrock-core/ui` serialization protocol has an 80-byte limit on string fields. Longer strings must use Minecraft's localization key system instead — the key is serialized (it's always short) and the RP's `localize: true` setting resolves it at display time.
 
-This filter produces `data/translation-keys/translationKeys.generated.json` at build time so the ui-runtime can look up the full display string for layout calculations (word-wrap, ellipsis, `measureText`).
+This filter produces `data/translation-keys/translationKeys.generated.json` in Regolith's temp workspace at build time so the ui-runtime can look up the full display string for layout calculations (word-wrap, ellipsis, `measureText`). The temp data folder is never synced back to the project — the bundler resolves the `packs/data` alias against the temp workspace and inlines the JSON into the script bundle, so nothing generated ever lands in the project source tree.
 
 The output is nested by locale (`{ "en_US": { ... }, "es_ES": { ... } }`) — Bedrock script bundles are static (no dynamic per-player import), so every configured locale's map ships in the one generated module, and your script picks the right sub-map per player at render time with `resolveTranslationKeysForPlayer` (keyed off `player.clientSystemInfo.locale`).
 
@@ -103,9 +103,9 @@ import myKeys from './myCustomKeys.json';
 
 ### TypeScript setup
 
-On `regolith install`, the filter copies a `translationKeys.generated.d.ts` declaration into your project's `data/translation-keys/` folder. Commit this file — TypeScript uses it as a fallback before Regolith runs.
+On `regolith install`, the filter copies a `translationKeys.generated.d.ts` declaration into your project's `data/translation-keys/` folder. Commit this file — it is the only thing that lives there (the generated `.json` exists only in Regolith's temp workspace), and TypeScript uses it to type the module without ever running a build.
 
-Add the following path alias to your `tsconfig.json` so TypeScript and the bundler resolve the `@bedrock-core/generated/translation-keys` import in your scripts:
+Add the following path alias to your `tsconfig.json` (and make sure `packs/data/**/*` is in `include` so the declaration loads). The bundler resolves the alias against the temp workspace during a run; on real disk it never resolves, so the IDE falls back to the declaration:
 
 ```json
 {

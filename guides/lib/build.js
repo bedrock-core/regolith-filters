@@ -64,7 +64,27 @@ export function buildLocale({ files, categories, prefix, maxCodeLineBytes, linkT
       fallbackTitle: humanizeFilename(basename),
     });
 
-    pages.set(pageId, { frontmatter: parsed.frontmatter, titleK: result.titleK, blocks: result.blocks });
+    // Sidebar row extras (Docusaurus-adjacent frontmatter): `icon` is a texture path shown as
+    // the row thumbnail; `description` becomes a one-line subtitle. The icon is locale-independent;
+    // the description rides this locale's .lang under a structural key so translations pair up.
+    const icon = typeof parsed.frontmatter.icon === 'string' && parsed.frontmatter.icon !== ''
+      ? parsed.frontmatter.icon
+      : undefined;
+    if (icon !== undefined && icon.length > 80) {
+      report.warn(pageId, `icon "${icon}" exceeds 80 characters — the serializer truncates texture paths at 80`);
+    }
+
+    // The subtitle renders through localizationKey, which can't carry a § prefix — so the muted
+    // grey is baked into the value (like admonition titles). A leading §7 the author can still
+    // override with their own inline codes; it also guards the digit-leading-label render bug.
+    let descK;
+    const description = parsed.frontmatter.description;
+    if (typeof description === 'string' && description.trim() !== '') {
+      descK = pageKey(prefix, pageId, '_desc');
+      lang.set(descK, `§7${description.trim()}`);
+    }
+
+    pages.set(pageId, { frontmatter: parsed.frontmatter, titleK: result.titleK, blocks: result.blocks, icon, descK });
     for (const [key, value] of result.lang) lang.set(key, value);
   }
 

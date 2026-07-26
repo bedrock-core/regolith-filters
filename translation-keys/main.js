@@ -1,6 +1,11 @@
 // @bedrock-core/regolith-filters — translation-keys
-// Generates data/translation-keys/translationKeys.generated.json: one JSON object
-// nested by locale, each value a merged translation map for that locale.
+// Generates data/translation-keys/translationKeys.generated.json in the Regolith
+// temp workspace: one JSON object nested by locale, each value a merged translation
+// map for that locale. The temp data folder is never synced back to the project
+// (this filter has no exportData) — the bundler's tsconfig-paths plugin resolves
+// the packs/data alias against the temp workspace, and the committed
+// translationKeys.generated.d.ts (seeded by `regolith install`) types the module
+// for the IDE.
 //
 // Per locale, merge order (later entries override earlier ones):
 //   1. Vanilla <locale>.lang from Mojang's bedrock-samples GitHub (cached)
