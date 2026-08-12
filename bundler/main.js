@@ -123,6 +123,16 @@ if (settings.debug) {
   console.log("🐛 Debug mode enabled");
 }
 
+/** Minecraft modules the game provides at runtime; never bundled, only declared in the manifest. */
+const MINECRAFT_MODULES = [
+  "@minecraft/server",
+  "@minecraft/server-ui",
+  "@minecraft/server-gametest",
+  "@minecraft/server-net",
+  "@minecraft/server-admin",
+  "@minecraft/debug-utilities",
+];
+
 /**
  * Load and parse tsconfig.json
  */
@@ -286,14 +296,7 @@ async function main() {
       // Let esbuild resolve tsconfig path aliases (e.g. @bedrock-core/ui, user data paths)
       tsconfig: tsconfigPath,
       // Mark Minecraft modules as external (provided by the game at runtime)
-      external: [
-        "@minecraft/server",
-        "@minecraft/server-ui",
-        "@minecraft/server-gametest",
-        "@minecraft/server-net",
-        "@minecraft/server-admin",
-        "@minecraft/debug-utilities",
-      ],
+      external: [...MINECRAFT_MODULES],
     };
 
     // Add debug-specific options

@@ -135,5 +135,37 @@ export function buildManifest({ build, categories, prefix, ns, defaultLocale, lo
     if (i < order.length - 1) pages[pageId].next = order[i + 1];
   });
 
-  return { v: 1, ns, defaultLocale, locales, tree, pages };
+  const manifest = { v: 1, ns, defaultLocale, locales, tree, pages };
+  const home = resolveHome(build.pages, report);
+
+  if (home !== undefined) manifest.home = home;
+
+  return manifest;
+}
+
+/**
+ * The page marked `home: true` in its frontmatter — where the guide opens, instead of its
+ * sidebar. Pairs naturally with `hidden: true`: a landing page usually should not also be a
+ * sidebar row.
+ *
+ * Two pages claiming it is an authoring mistake, not a build-breaking one, so the first in
+ * document order wins and the rest are reported. The renderer already drops the sidebar for a
+ * single-page guide on its own, so this is only needed once there is more than one page.
+ *
+ * @param {Map<string, object>} pages  PageId → { frontmatter, ... }
+ * @param {{ warn(scope: string, msg: string): void }} report
+ * @returns {string | undefined}
+ */
+function resolveHome(pages, report) {
+  const declared = [];
+
+  for (const [pageId, page] of pages) {
+    if (page.frontmatter.home === true) declared.push(pageId);
+  }
+
+  if (declared.length > 1) {
+    report.warn('home', `${declared.length} pages set "home: true" (${declared.join(', ')}) — using "${declared[0]}"`);
+  }
+
+  return declared[0];
 }

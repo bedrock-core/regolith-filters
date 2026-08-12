@@ -36,6 +36,28 @@ function build({ files = FIXTURE, categories = CATEGORIES } = {}) {
   return { manifest, lang: localeBuild.lang, report };
 }
 
+describe('buildManifest home', () => {
+  it('omits home when no page claims it', () => {
+    expect(build().manifest.home).toBeUndefined();
+  });
+
+  it('takes home from the page whose frontmatter sets it', () => {
+    const files = new Map(FIXTURE).set('landing', '---\ntitle: Start\nhome: true\nhidden: true\n---\n\nHi.\n');
+
+    expect(build({ files }).manifest.home).toBe('landing');
+  });
+
+  it('uses the first of several claimants and reports the rest', () => {
+    const files = new Map(FIXTURE)
+      .set('a-landing', '---\ntitle: A\nhome: true\n---\n\nA.\n')
+      .set('b-landing', '---\ntitle: B\nhome: true\n---\n\nB.\n');
+    const { manifest, report } = build({ files });
+
+    expect(manifest.home).toBe('a-landing');
+    expect(report.warnings.join(' ')).toContain('home');
+  });
+});
+
 describe('buildManifest', () => {
   it('orders the sidebar by position then name, hiding hidden pages', () => {
     const { manifest } = build();

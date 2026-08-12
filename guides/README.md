@@ -97,7 +97,12 @@ remark-mdx — both `.md` and `.mdx` run through the same MDX-enabled pipeline, 
   frontmatter `title` is set (then it stays in the body).
 - **Frontmatter**: `title`, `sidebar_position`, `hidden` (compiled but out of sidebar/pagination),
   `icon` (RP texture path shown as the sidebar row thumbnail; ≤80 chars), `description` (a
-  one-line, localized subtitle under the row title — kept short).
+  one-line, localized subtitle under the row title — kept short), `home` (see below).
+- **`home: true`** makes that page the one the guide opens on, instead of its sidebar — for when
+  the sidebar is not the introduction you would have written. The sidebar stays one press away
+  while there is more than one page; a single-page guide drops it entirely, with or without
+  `home`. Pairs naturally with `hidden: true`, since a landing page is usually not also a sidebar
+  row. Two pages claiming it is a warning, not an error: the first in document order wins.
 - **Inline styles** baked into `.lang` values as `§` codes: `**bold**`→`§l`, `*italic*`→`§o`,
   `` `code` ``→`§7`, `~~strike~~`→`§8` (dim — Bedrock has no strikethrough), links→`§9`.
 - **Links**: internal links (`./page.mdx`, `../intro`, `/abs/page`) are validated at build time
