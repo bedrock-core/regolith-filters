@@ -22,15 +22,17 @@ export function discoverI18nLibs(projectRoot) {
   const libs = [];
 
   /**
-   * Walk one package's dependencies for declarers. Recurses INTO declaring
-   * libraries only (config → guides), so a library's own i18n-speaking
-   * dependencies fold in transitively without walking the whole node_modules
-   * graph. Dedupe is by real path — portals and hoisting alias the same dir.
+   * Walk the dependency graph for declarers. Recurses through EVERY resolvable
+   * dependency — a declarer may sit behind a non-declaring umbrella (config
+   * behind `@bedrock-core/ui`), so stopping at non-declarers loses libraries.
+   * Each package.json is read at most once (dedupe by real path — portals and
+   * hoisting alias the same dir), so the walk stays cheap. devDependencies
+   * count only at the addon root: transitive devDeps aren't installed.
    */
-  const visit = (fromDir, pkg) => {
+  const visit = (fromDir, pkg, isRoot = false) => {
     const names = [...new Set([
       ...Object.keys(pkg.dependencies ?? {}),
-      ...Object.keys(pkg.devDependencies ?? {}),
+      ...Object.keys(isRoot ? pkg.devDependencies ?? {} : {}),
     ])].sort();
 
     for (const name of names) {
@@ -56,16 +58,16 @@ export function discoverI18nLibs(projectRoot) {
       }
 
       const decl = libPkg.bedrockCore?.i18n;
-      if (decl === undefined) continue;
+      if (decl !== undefined) {
+        if (typeof decl !== 'object' || decl === null || typeof decl.dir !== 'string' || typeof decl.namespace !== 'string') {
+          throw new Error(`${name}: "bedrockCore.i18n" must be an object { dir, namespace }`);
+        }
+        if (!/^[a-z0-9_]+$/.test(decl.namespace)) {
+          throw new Error(`${name}: bedrockCore.i18n.namespace "${decl.namespace}" must be lowercase a-z0-9_`);
+        }
 
-      if (typeof decl !== 'object' || decl === null || typeof decl.dir !== 'string' || typeof decl.namespace !== 'string') {
-        throw new Error(`${name}: "bedrockCore.i18n" must be an object { dir, namespace }`);
+        libs.push({ name, namespace: decl.namespace, dir: path.join(pkgDir, decl.dir), pkgDir });
       }
-      if (!/^[a-z0-9_]+$/.test(decl.namespace)) {
-        throw new Error(`${name}: bedrockCore.i18n.namespace "${decl.namespace}" must be lowercase a-z0-9_`);
-      }
-
-      libs.push({ name, namespace: decl.namespace, dir: path.join(pkgDir, decl.dir), pkgDir });
       visit(pkgDir, libPkg);
     }
   };
@@ -74,7 +76,7 @@ export function discoverI18nLibs(projectRoot) {
   if (!fs.existsSync(pkgPath)) return [];
 
   try {
-    visit(projectRoot, JSON.parse(fs.readFileSync(pkgPath, 'utf-8')));
+    visit(projectRoot, JSON.parse(fs.readFileSync(pkgPath, 'utf-8')), true);
   } catch (err) {
     if (err instanceof SyntaxError) return [];
     throw err;

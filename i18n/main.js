@@ -25,7 +25,7 @@ import { parseLang, stripGeneratedSection, upsertGeneratedSection } from './lib/
 import { discoverI18nLibs, libLocaleFiles } from './lib/libs.js';
 import { loadTsModule } from './lib/load.js';
 import { scanNamespace, scanVanillaUsage, walkSources } from './lib/scan.js';
-import { checkParity, checkPlurals, checkVarParity, flattenResources } from './lib/tree.js';
+import { checkParity, checkPlurals, checkVarParity, flattenResources, pluralBase } from './lib/tree.js';
 import { fetchVanillaLang, vanillaDtsText, VANILLA_LANG_URL_TEMPLATE } from './lib/vanilla.js';
 
 // ---------------------------------------------------------------------------
@@ -427,6 +427,14 @@ async function main() {
     // drift, this fills gaps and drops extras deterministically.
     const localeOwn = own.get(locale);
     for (const [p, defaultValue] of ownDefault) combined.set(p, localeOwn.get(p) ?? defaultValue);
+    // …except locale-only plural variants, which are legitimate: CLDR
+    // categories differ per locale (Czech `few`, Arabic `two`). Keep them when
+    // the default locale declares the group.
+    for (const [p, v] of localeOwn) {
+      if (combined.has(p)) continue;
+      const base = pluralBase(p);
+      if (base !== undefined && ownDefault.has(`${base}_other`)) combined.set(p, v);
+    }
 
     const flattened = new Map();
     for (const [p, v] of combined) {
@@ -435,11 +443,16 @@ async function main() {
     tables.set(locale, flattened);
   }
 
-  // ── Recorded argument order (default locale appearance order) ─────────────
+  // ── Recorded argument order (defining locale appearance order) ────────────
+  // Default locale first so shared keys keep its order; locale-only plural
+  // variants pick their order up from the locale that defines them.
   const args = {};
-  for (const [p, v] of tables.get(settings.defaultLocale)) {
-    const vars = templateVars(v);
-    if (vars.length > 0) args[p] = vars;
+  for (const locale of [settings.defaultLocale, ...locales]) {
+    for (const [p, v] of tables.get(locale) ?? []) {
+      if (args[p] !== undefined) continue;
+      const vars = templateVars(v);
+      if (vars.length > 0) args[p] = vars;
+    }
   }
 
   // ── Lang passthrough: hand-written + guides-filter entries ──────────────────

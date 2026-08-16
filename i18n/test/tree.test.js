@@ -41,6 +41,12 @@ describe('checkParity', () => {
     const other = new Map([['b', '2'], ['c', '3']]);
     expect(checkParity(def, other)).toEqual({ missing: ['a'], extra: ['c'] });
   });
+
+  it('accepts locale-only plural variants whose group the default declares', () => {
+    const def = new Map([['stock_one', 'x'], ['stock_other', 'y']]);
+    const other = new Map([['stock_one', 'x'], ['stock_few', 'f'], ['stock_other', 'y'], ['orphan_few', 'z']]);
+    expect(checkParity(def, other)).toEqual({ missing: [], extra: ['orphan_few'] });
+  });
 });
 
 describe('checkVarParity', () => {
@@ -50,6 +56,14 @@ describe('checkVarParity', () => {
     const drifted = checkVarParity(def, other);
     expect(drifted).toHaveLength(1);
     expect(drifted[0].path).toBe('k');
+  });
+
+  it('checks locale-only plural variants against the group _other reference', () => {
+    const def = new Map([['stock_other', '{{count}} left']]);
+    const other = new Map([['stock_few', '{{count}} few'], ['stock_many', '{{n}} many']]);
+    const drifted = checkVarParity(def, other);
+    expect(drifted).toHaveLength(1);
+    expect(drifted[0].path).toBe('stock_many');
   });
 });
 

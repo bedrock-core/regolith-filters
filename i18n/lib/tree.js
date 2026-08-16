@@ -69,6 +69,9 @@ export function flattenResources(value, report, prefix = '', depth = 0) {
 /**
  * Locale parity, both directions. Missing keys mean a player sees raw keys;
  * extra keys almost always mean a rename landed in one file and not the other.
+ * A locale-only plural variant whose group the default locale declares is NOT
+ * extra — CLDR categories legitimately differ per locale (Czech `few`,
+ * Arabic `two`).
  *
  * @param {Map<string, string>} defaultMap
  * @param {Map<string, string>} localeMap
@@ -76,7 +79,11 @@ export function flattenResources(value, report, prefix = '', depth = 0) {
  */
 export function checkParity(defaultMap, localeMap) {
   const missing = [...defaultMap.keys()].filter((k) => !localeMap.has(k));
-  const extra = [...localeMap.keys()].filter((k) => !defaultMap.has(k));
+  const extra = [...localeMap.keys()].filter((k) => {
+    if (defaultMap.has(k)) return false;
+    const base = pluralBase(k);
+    return base === undefined || !defaultMap.has(`${base}_other`);
+  });
   return { missing, extra };
 }
 
@@ -92,7 +99,10 @@ export function checkParity(defaultMap, localeMap) {
 export function checkVarParity(defaultMap, localeMap) {
   const drifted = [];
   for (const [path, template] of localeMap) {
-    const reference = defaultMap.get(path);
+    // A locale-only plural variant answers to its group's `_other` reference.
+    const base = pluralBase(path);
+    const reference = defaultMap.get(path)
+      ?? (base === undefined ? undefined : defaultMap.get(`${base}_other`));
     if (reference === undefined) continue;
     const expected = templateVars(reference).sort();
     const got = templateVars(template).sort();
