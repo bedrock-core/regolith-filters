@@ -7,7 +7,7 @@
   "properties": {
     "namespace": {
       "type": "string",
-      "description": "Addon namespace used in generated localization keys (bcg.<keyPrefix>.*). Required."
+      "description": "Addon namespace used in generated localization keys (<namespace>.guides.*). Use the same <creator>_<pack> join core.register() and the i18n filter use. Required."
     },
     "sourceDir": {
       "type": "string",

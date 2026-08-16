@@ -39,13 +39,18 @@ directories are read as locales, so the generated files never look like content.
 "profiles": {
   "default": {
     "filters": [
-      { "filter": "guides", "settings": { "keyPrefix": "my_addon" } },
+      { "filter": "guides", "settings": { "namespace": "creator_pack" } },
       { "filter": "i18n" },
       { "filter": "bundler" }
     ]
   }
 }
 ```
+
+`namespace` is **required** — the filter aborts without it. Use your addon namespace, the same
+`<creator>_<pack>` join the i18n filter derives from `core.register({ creator, pack })` and the
+server runtime's `addonNamespace()` builds at startup, so every key your pack emits sits under
+one prefix.
 
 **Ordering is mandatory: `guides` → `i18n` → `bundler`.** guides writes `.lang`
 entries *before* the i18n filter carries them into its bundle's passthrough, which is how
@@ -79,7 +84,7 @@ const Guide = createGuide(guides, { title: 'My Addon' });
 
 | Setting | Default | Description |
 | --- | --- | --- |
-| `keyPrefix` | — (**required**) | Addon namespace in generated keys: `bcg.<keyPrefix>.*` |
+| `namespace` | — (**required**) | Addon namespace in generated keys: `<namespace>.guides.*` |
 | `sourceDir` | `data/guides` | Content root; direct child *directories* are locale folders |
 | `defaultLocale` | `en_US` | Locale defining structure, keys, sidebar, and fallback values |
 | `include` / `exclude` | `**/*.md`, `**/*.mdx` / `[]` | Page selection globs per locale folder |
@@ -124,7 +129,8 @@ remark-mdx — both `.md` and `.mdx` run through the same MDX-enabled pipeline, 
 
 - The **default locale is the single source of structural truth**: it defines the page set, key
   set, sidebar and prev/next. Other locales contribute *values only*.
-- Keys are **structural** (`bcg.<ns>.<page_path>.<b0|b1.i2|…>`): the same deterministic walk runs
+- Keys are **structural** (`<ns>.guides.<page_path>.<b0|b1.i2|…>`, category labels under
+  `<ns>.guides._cat.<dir_path>`): the same deterministic walk runs
   over every locale, so identical document structure pairs keys positionally. Editing a page
   reshuffles indices — that costs nothing because the `.lang` section is fully regenerated and
   translators edit the per-locale MDX, never the `.lang`.
@@ -141,6 +147,6 @@ remark-mdx — both `.md` and `.mdx` run through the same MDX-enabled pipeline, 
 
 - This filter is **ESM** (`"type": "module"`) because unified/remark v11+ are ESM-only —
   transparent to Regolith, which just spawns `node ./main.js`.
-- Generated `.lang` sections are delimited by `## <bcg:generated-guides:begin/end>` markers and
+- Generated `.lang` sections are delimited by `## <core:generated-guides:begin/end>` markers and
   re-running is idempotent; hand-written entries outside the markers are preserved.
 - `yarn test` runs the transform unit tests (vitest).

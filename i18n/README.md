@@ -44,8 +44,9 @@ branches like `core` are override-only: see [Libraries](#libraries).
 
 ## Namespacing
 
-Every key you author lands in the `.lang` files prefixed with your addon's namespace:
-`shop.bought` becomes `drav0011_shop.shop.bought`. The prefix is what keeps addons from
+Every key you author at the root lands in the `.lang` files prefixed with your addon's namespace:
+`shop.bought` becomes `drav0011_shop.shop.bought`. (Library branches keep their own namespace —
+`core.addons.title` stays `core.addons.title`, override or not.) The prefix is what keeps addons from
 colliding everywhere their text meets: Bedrock merges every installed pack's `.lang` into one
 world-wide table, and the server runtime merges every addon's published translation tables (and
 config, and guides) into shared replicated state under the same namespace.
@@ -67,9 +68,9 @@ bundle's metadata.
 | --- | --- | --- |
 | `RP/texts/<locale>.lang` | your pack | what Bedrock resolves, per player, in their language |
 | `RP/texts/languages.json` | your pack | kept in sync with the locales you author |
-| `data/i18n/i18n.generated.json` | Regolith temp | per-locale tables + interpolation arg order + namespace, inlined into the script bundle |
-| `data/i18n/i18n.generated.d.ts` | your project (commit it) | types the bundle module: your resources at the root, libraries and `vanilla` grafted on |
-| `data/i18n/vanilla.generated.d.ts` | your project (commit it) | the vanilla key tree, so `$.vanilla.*` autocompletes |
+| `data/i18n/i18n.generated.json` | Regolith temp | per-locale tables, interpolation arg order, namespace, and the `.lang` passthrough — inlined into the script bundle |
+| `packs/data/i18n/i18n.generated.d.ts` | your project (commit it) | types the bundle module: your resources at the root, libraries and `vanilla` grafted on |
+| `packs/data/i18n/vanilla.generated.d.ts` | your project (commit it) | the vanilla key tree, so `$.vanilla.*` autocompletes |
 
 The `.lang` files are written into the pack because Bedrock reads them at runtime. The generated
 JSON stays in Regolith's temp workspace and is never synced back — the bundler resolves the
@@ -101,11 +102,16 @@ makes them reachable for the generated types:
 "exports": { "./i18n/*": { "types": "./src/i18n/*.ts", "import": "./src/i18n/*.ts" } }
 ```
 
-The filter walks your dependencies for that field and folds each library's resources in under
-the declared namespace (`core` for the whole bedrock-core family — several packages may share
-one namespace; a key two packages define with different values is a build error): its keys are
-emitted into your `.lang` files, its tree appears under `$.core.*`, and its strings ride in your
-runtime bundle.
+The filter walks your **whole dependency graph** for that field — through non-declaring packages
+too, since a declarer usually sits behind an umbrella (`@bedrock-core/config` behind
+`@bedrock-core/ui`) — and folds each library's resources in under the declared namespace (`core`
+for the whole bedrock-core family — several packages may share one namespace; a key two packages
+define with different values is a build error): its keys are emitted into your `.lang` files, its
+tree appears under `$.core.*`, and its strings ride in your runtime bundle.
+
+`devDependencies` count only at your addon's root, since transitive devDependencies are never
+installed. Every package is read at most once (deduped by real path, so portals and hoisted
+copies never double-count).
 
 Library branches are **override-only** from `data/i18n`: you may author `core.addons.title` to
 deliberately rename a library string ("Addons" → "Mods"), and your value wins — but only for
@@ -120,8 +126,9 @@ generated into `vanilla.generated.d.ts`. Never emitted into your RP: the client 
 those strings, so re-adding them would only bloat the pack.
 
 Server-side values (what `t()` returns and what the layout engine measures) are included in the
-runtime bundle **only for the keys your compiled scripts actually reference** — the filter scans
-the compiled output for string literals and for `$.vanilla.` selector chains. A key assembled at
+runtime bundle **only for the keys your scripts actually reference** — the filter runs before the
+bundler, so it scans the sources under `BP/scripts` (plus each discovered library's `src/`) for
+string literals and for `$.vanilla.` selector chains. A key assembled at
 runtime (`'item.' + id + '.name'`) is not found: `key()`/`raw()` still resolve on the client,
 but `t()` falls back to the raw key and measurement for that one string is approximate. Set
 `vanilla: false` to skip the fetch and the branch entirely.
@@ -154,14 +161,29 @@ Two conveniences deliberately do not exist:
 Everything here converts a silent runtime failure into a build error naming the path to fix:
 
 - **Locale parity.** Every non-default locale must have exactly the default locale's key set
-  (library overrides exempt). Missing keys mean a player sees raw keys; *extra* keys almost
-  always mean a rename landed in one file and not the other.
+  (library overrides and locale-only plural variants exempt — see below). Missing keys mean a
+  player sees raw keys; *extra* keys almost always mean a rename landed in one file and not the
+  other.
+- **Interpolation variables.** Per shared key the variable *set* must match the default locale's
+  — order is free, since the positional slots come from the default order. An override must keep
+  the library string's variables. A drifted set is arguments landing in the wrong placeholders,
+  or nowhere.
 - **Reserved branches.** `vanilla` is never authorable; library branches only for paths the
   library defines.
-- **Plural sets.** A `_one` without its `_other` (or vice versa) is an error, per locale.
+- **Plural sets.** Suffixes are the CLDR categories — `_zero`, `_one`, `_two`, `_few`, `_many`,
+  `_other` — and every group needs its `_other`, the universal fallback category, without which
+  most counts resolve to nothing. Checked once over the default locale's keys, yours and the
+  libraries' together.
 - **Usable output.** Single-line values, `key=value`-safe key segments, valid Bedrock locale
   codes as filenames, nesting depth ≤ 6 (past that, type-level path recursion degrades the whole
   key union to `string` with nothing to explain why).
+
+**Locale-only plural variants** are the one place a locale may carry keys the default locale
+never declares — Czech needs `stock_few`, Arabic `stock_two`, and `en_US` has no use for either.
+They survive into the `.lang` files and the runtime bundle instead of being dropped as parity
+drift, as long as the default locale declares the group's `_other`. Their interpolation variables
+are checked against that `_other`, and their argument order comes from the locale that defines
+them.
 
 Set `strict: false` to warn instead of failing.
 
@@ -190,6 +212,7 @@ No settings are required when the `core.register` scan succeeds.
 | --- | --- | --- | --- |
 | `namespace` | `string` | derived | Overrides the `core.register` scan; **required** only when the scan fails |
 | `defaultLocale` | `string` | `"en_US"` | The locale whose file defines the shape and types |
+| `sourceDir` | `string` | `"data/i18n"` | Where the per-locale resource modules live, relative to the Regolith temp workspace |
 | `vanilla` | `boolean` | `true` | Generate `$.vanilla.*` types and bundle used vanilla strings |
 | `vanillaLangUrlTemplate` | `string` | bedrock-samples URL | Where vanilla `.lang` is fetched from — `{locale}` is replaced |
 | `cacheMaxAgeHours` | `number` | `24` | Hours before a locale's cached vanilla `.lang` is stale |
@@ -197,10 +220,21 @@ No settings are required when the `core.register` scan succeeds.
 
 ## Migrating from translation-keys
 
+`translation-keys` was removed in this release — pre-removal tags still resolve and install, but
+nothing new ships there. The filter bundles a converter; run it from your **Regolith project
+root**, which is where it reads `config.json` to find your pack and data paths:
+
 ```bash
-node bin/from-lang.js
+node .regolith/cache/filters/i18n/bin/from-lang.js
 ```
 
-Converts your existing `RP/texts/*.lang` entries into `packs/data/i18n/<locale>.ts` modules
-(namespace prefix stripped back off), then swap the filter in `config.json`. `translation-keys`
-keeps working for one release.
+It takes the keys under your namespace out of `RP/texts/*.lang` and `BP/texts/*.lang` — skipping
+generated marker sections — and writes them back as `packs/data/i18n/<locale>.ts` resource
+modules with the prefix stripped off (the filter re-applies it at build time). Pass
+`--namespace <creator_pack>` when the `core.register` scan can't derive it, and `--force` to
+overwrite modules that already exist.
+
+Nothing is destroyed: your `.lang` files are left untouched and the run summarizes what moved and
+what stayed (un-namespaced keys such as `pack.name`, guide sections, other addons' keys). Then
+swap the filter in `config.json`, build once, and delete the migrated lines from `.lang` — the
+filter regenerates them, namespaced identically, inside its marker section.

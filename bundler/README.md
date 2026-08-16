@@ -25,8 +25,6 @@ Install the filter using Regolith:
 regolith install github.com/bedrock-core/regolith-filters/bundler
 ```
 
-Or use the provided starter in `starter-example`
-
 ## Requirements
 
 1. **tsconfig.json** - Create a `tsconfig.json` in your project root

@@ -28,7 +28,7 @@ Then reference it in your project `config.json`:
   "regolith": {
     "filterDefinitions": {
       "generator": {
-        "url": "github.com/bedrock-core/regolith-filters/generator",
+        "url": "github.com/bedrock-core/regolith-filters",
         "version": "1.0.0"
       }
     },
@@ -181,10 +181,6 @@ Notes:
 - "Invalid default export array" — The tuple must be exactly `[nameFn, dataFn, items]`.
 - "Invalid filename" — `nameFn` must return a non-empty basename (optionally ending with `.json`).
 - Transpile/evaluation errors — Check TypeScript syntax and returned data shapes. The filter logs which file failed.
-
-## Starter example
-
-See `starter-example/` in this repository for a minimal project showing both single and multiple generation patterns.
 
 ## Changelog
 

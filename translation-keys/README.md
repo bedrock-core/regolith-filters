@@ -14,8 +14,10 @@
 > **Migrate:** from your Regolith project root run
 >
 > ```bash
-> node <path-to>/regolith-filters/i18n/bin/from-lang.js --namespace <creator_pack>
+> node .regolith/cache/filters/i18n/bin/from-lang.js
 > ```
+>
+> (`--namespace <creator_pack>` if the `core.register` scan can't derive it.)
 >
 > It converts your `.lang` entries into `packs/data/i18n/<locale>.ts` resource modules. Then swap
 > the filter in `config.json` (before `bundler`, after `guides`), point your tsconfig alias at

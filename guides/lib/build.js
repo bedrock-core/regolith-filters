@@ -13,7 +13,7 @@ import { buildSidebar } from './sidebar.js';
  * @param {object} input
  * @param {Map<string, string>} input.files       PageId → MDX source
  * @param {Map<string, object>} input.categories  dirPath → parsed _category_.json
- * @param {string} input.prefix                   'bcg.<ns>'
+ * @param {string} input.prefix                   '<ns>.guides'
  * @param {number} input.maxCodeLineBytes
  * @param {Set<string>} [input.linkTargets]       valid link targets (defaults to this locale's own pages;
  *                                                pass the default locale's set when compiling translations)
