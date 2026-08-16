@@ -40,15 +40,15 @@ directories are read as locales, so the generated files never look like content.
   "default": {
     "filters": [
       { "filter": "guides", "settings": { "keyPrefix": "my_addon" } },
-      { "filter": "translation-keys" },
+      { "filter": "i18n" },
       { "filter": "bundler" }
     ]
   }
 }
 ```
 
-**Ordering is mandatory: `guides` → `translation-keys` → `bundler`.** guides writes `.lang`
-entries *before* translation-keys merges them into `translationKeys.generated.json`, which is how
+**Ordering is mandatory: `guides` → `i18n` → `bundler`.** guides writes `.lang`
+entries *before* the i18n filter carries them into its bundle's passthrough, which is how
 guide keys reach the runtime's text-measurement context; the bundler then inlines both generated
 modules.
 

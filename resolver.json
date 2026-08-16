@@ -10,6 +10,9 @@
     "guides": {
       "url": "github.com/bedrock-core/regolith-filters/guides"
     },
+    "i18n": {
+      "url": "github.com/bedrock-core/regolith-filters/i18n"
+    },
     "translation-keys": {
       "url": "github.com/bedrock-core/regolith-filters/translation-keys"
     }

@@ -1,0 +1,16 @@
+{
+  "name": "@bedrock-core/regolith-filters_i18n",
+  "version": "1.0.0",
+  "description": "Regolith filter that compiles nested TypeScript translation resources into .lang files, a measurement bundle and i18next type augmentation.",
+  "type": "module",
+  "packageManager": "yarn@4.9.4",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "esbuild": "^0.25.10"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.5"
+  }
+}

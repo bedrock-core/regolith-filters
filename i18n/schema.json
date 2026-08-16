@@ -1,0 +1,44 @@
+{
+	"$schema": "http://json-schema.org/draft-07/schema#",
+	"title": "i18n filter settings",
+	"type": "object",
+	"additionalProperties": false,
+	"properties": {
+		"namespace": {
+			"type": "string",
+			"pattern": "^[a-z0-9_]+$",
+			"description": "Overrides the core.register({ creator, pack }) scan. Required only when the scan fails (no call, or creator/pack composed at runtime instead of written as string literals)."
+		},
+		"defaultLocale": {
+			"type": "string",
+			"pattern": "^[a-z]{2}_[A-Z]{2}$",
+			"default": "en_US",
+			"description": "The locale whose resource file defines the shape and the types; every other locale must carry exactly its key set."
+		},
+		"sourceDir": {
+			"type": "string",
+			"default": "data/i18n",
+			"description": "Where the per-locale resource modules live, relative to the Regolith temp workspace."
+		},
+		"vanilla": {
+			"type": "boolean",
+			"default": true,
+			"description": "Generate the $.vanilla.* key tree and bundle the vanilla strings your scripts reference. Vanilla strings are never emitted into the RP either way."
+		},
+		"vanillaLangUrlTemplate": {
+			"type": "string",
+			"default": "https://raw.githubusercontent.com/Mojang/bedrock-samples/refs/heads/main/resource_pack/texts/{locale}.lang",
+			"description": "URL template vanilla .lang files are fetched from — {locale} is replaced with the locale code."
+		},
+		"cacheMaxAgeHours": {
+			"type": "number",
+			"default": 24,
+			"description": "Hours before a locale's cached vanilla .lang is considered stale."
+		},
+		"strict": {
+			"type": "boolean",
+			"default": true,
+			"description": "Fail the build on check violations (locale parity, variable drift, invalid overrides…) instead of warning."
+		}
+	}
+}

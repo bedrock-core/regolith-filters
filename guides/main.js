@@ -10,8 +10,8 @@
 //      section) — long prose rides localization keys, so the client resolves
 //      text per player language and the runtime's raw-text cap never applies.
 //
-// MUST run BEFORE the translation-keys filter (guide keys have to land in the
-// merged metrics map) which in turn runs before the bundler.
+// MUST run BEFORE the i18n filter (guide keys have to land in the bundle's
+// .lang passthrough for measurement) which in turn runs before the bundler.
 
 import fs from 'node:fs';
 import path from 'node:path';

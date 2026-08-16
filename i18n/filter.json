@@ -1,0 +1,10 @@
+{
+	"description": "Compiles nested TypeScript translation resources into .lang files, a runtime bundle and typed key trees.",
+	"filters": [
+		{
+			"name": "Compile i18n Resources",
+			"runWith": "nodejs",
+			"script": "./main.js"
+		}
+	]
+}
