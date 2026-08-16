@@ -3,22 +3,9 @@
 
 import { ADMONITION_COLORS, compilePage } from './compile.js';
 import { resolveInternalLink } from './inline.js';
-import { admKey, catKey, pageKey } from './keys.js';
+import { catKey, pageKey } from './keys.js';
 import { humanizeFilename, parseGuideFile } from './parse.js';
 import { buildSidebar } from './sidebar.js';
-
-/**
- * Default admonition titles (kind color+bold baked into the value — titles
- * render through localizationKey, which can't carry a § prefix).
- * English-only in v1 — other locales inherit via fallback fill.
- */
-export const ADMONITION_TITLES = {
-  note: `${ADMONITION_COLORS.note}§lNote`,
-  tip: `${ADMONITION_COLORS.tip}§lTip`,
-  info: `${ADMONITION_COLORS.info}§lInfo`,
-  warning: `${ADMONITION_COLORS.warning}§lWarning`,
-  danger: `${ADMONITION_COLORS.danger}§lDanger`,
-};
 
 /**
  * Compile every page of one locale.
@@ -121,10 +108,6 @@ export function buildManifest({ build, categories, prefix, ns, defaultLocale, lo
     },
     warn: (msg) => report.warn('sidebar', msg),
   });
-
-  for (const [kind, title] of Object.entries(ADMONITION_TITLES)) {
-    build.lang.set(admKey(prefix, kind), title);
-  }
 
   const pages = {};
   for (const [pageId, page] of build.pages) {

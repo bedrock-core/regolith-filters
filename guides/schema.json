@@ -3,9 +3,9 @@
   "$id": "core-guides",
   "type": "object",
   "description": "Regolith filter that compiles MDX guide content (data/guides/<locale>/**) into a guide IR manifest plus auto-localized .lang entries.",
-  "required": ["keyPrefix"],
+  "required": ["namespace"],
   "properties": {
-    "keyPrefix": {
+    "namespace": {
       "type": "string",
       "description": "Addon namespace used in generated localization keys (bcg.<keyPrefix>.*). Required."
     },

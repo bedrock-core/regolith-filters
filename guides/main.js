@@ -39,7 +39,7 @@ if (!projectRoot) {
 // ---------------------------------------------------------------------------
 
 const defaults = {
-  keyPrefix: '',
+  namespace: '',
   sourceDir: 'data/guides',
   defaultLocale: 'en_US',
   include: ['**/*.md', '**/*.mdx'],
@@ -52,15 +52,15 @@ const defaults = {
 const argParsed = process.argv[2] ? JSON.parse(process.argv[2]) : {};
 const settings = Object.assign({}, defaults, argParsed);
 
-if (!settings.keyPrefix || sanitizeSegment(settings.keyPrefix).length === 0) {
-  console.error('❌ "keyPrefix" setting is required (your addon namespace, e.g. "my_addon")');
+if (!settings.namespace || sanitizeSegment(settings.namespace).length === 0) {
+  console.error('❌ "namespace" setting is required (your addon namespace, e.g. "creator_pack" — keys become <namespace>.guides.*)');
   process.exit(1);
 }
 
 const cwd = process.cwd();
 const sourceRoot = path.join(cwd, settings.sourceDir);
-const prefix = keyPrefix(settings.keyPrefix);
-const ns = sanitizeSegment(settings.keyPrefix);
+const prefix = keyPrefix(settings.namespace);
+const ns = sanitizeSegment(settings.namespace);
 
 console.log('📖 @bedrock-core/guides');
 console.log('📂 Project root:', projectRoot);

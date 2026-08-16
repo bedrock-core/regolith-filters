@@ -5,10 +5,11 @@
 // document structure yields identical keys across locales — that is what
 // makes cross-locale pairing and parity checking possible.
 //
-// Scheme:
-//   bcg.<ns>.<page_path_dots>.<node_path>     page content
-//   bcg.<ns>._cat.<dir_path_dots>             category labels
-//   bcg.<ns>._adm.<kind>                      default admonition titles
+// Scheme (one rule with the i18n filter: <namespace>.<branch>.<path>):
+//   <ns>.guides.<page_path_dots>.<node_path>  page content
+//   <ns>.guides._cat.<dir_path_dots>          category labels
+// Admonition default titles are NOT emitted here: they are @bedrock-core/guides'
+// own typed resources (core.guides.adm.*), folded by the i18n filter.
 //
 // node_path grammar (assigned by lib/compile.js):
 //   title                 page title
@@ -28,9 +29,9 @@ export function pageIdToKeyPath(pageId) {
   return pageId.split('/').map(sanitizeSegment).join('.');
 }
 
-/** Root prefix shared by every key this filter emits: 'bcg.<ns>'. */
+/** Root prefix shared by every key this filter emits: '<ns>.guides'. */
 export function keyPrefix(ns) {
-  return `bcg.${sanitizeSegment(ns)}`;
+  return `${sanitizeSegment(ns)}.guides`;
 }
 
 /** Full key for a node inside a page. */
@@ -43,7 +44,3 @@ export function catKey(prefix, dirPath) {
   return `${prefix}._cat.${pageIdToKeyPath(dirPath)}`;
 }
 
-/** Full key for a default admonition title. */
-export function admKey(prefix, kind) {
-  return `${prefix}._adm.${kind}`;
-}

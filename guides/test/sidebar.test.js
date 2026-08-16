@@ -20,14 +20,14 @@ function build({ files = FIXTURE, categories = CATEGORIES } = {}) {
   const localeBuild = buildLocale({
     files: new Map(files),
     categories,
-    prefix: 'bcg.demo',
+    prefix: 'demo.guides',
     maxCodeLineBytes: 60,
     report,
   });
   const manifest = buildManifest({
     build: localeBuild,
     categories,
-    prefix: 'bcg.demo',
+    prefix: 'demo.guides',
     ns: 'demo',
     defaultLocale: 'en_US',
     locales: ['en_US'],
@@ -71,7 +71,7 @@ describe('buildManifest', () => {
     expect(cat).toMatchObject({
       t: 'cat',
       id: 'getting-started',
-      labelK: 'bcg.demo._cat.getting_started',
+      labelK: 'demo.guides._cat.getting_started',
       collapsed: true,
       link: 'getting-started/installation',
     });
@@ -79,7 +79,7 @@ describe('buildManifest', () => {
       'getting-started/installation',
       'getting-started/first-screen',
     ]);
-    expect(lang.get('bcg.demo._cat.getting_started')).toBe('Getting Started');
+    expect(lang.get('demo.guides._cat.getting_started')).toBe('Getting Started');
   });
 
   it('humanizes category labels when no _category_.json exists', () => {
@@ -105,10 +105,9 @@ describe('buildManifest', () => {
     expect(p['hidden-page'].next).toBeUndefined();
   });
 
-  it('emits default admonition title keys with baked kind colors', () => {
+  it('emits no admonition title keys (owned by @bedrock-core/guides typed resources)', () => {
     const { lang } = build();
-    expect(lang.get('bcg.demo._adm.tip')).toBe('§a§lTip');
-    expect(lang.get('bcg.demo._adm.danger')).toBe('§c§lDanger');
+    expect([...lang.keys()].some(k => k.includes('_adm'))).toBe(false);
   });
 
   it('warns and ignores broken category links', () => {
@@ -128,8 +127,8 @@ describe('buildManifest', () => {
 
     const intro = manifest.tree.find((n) => n.id === 'intro');
     expect(intro.icon).toBe('textures/ui/config/guide');
-    expect(intro.descK).toBe('bcg.demo.intro._desc');
-    expect(lang.get('bcg.demo.intro._desc')).toBe('§7Start here.');
+    expect(intro.descK).toBe('demo.guides.intro._desc');
+    expect(lang.get('demo.guides.intro._desc')).toBe('§7Start here.');
 
     // A page with neither frontmatter field omits both — the row degrades to text-only.
     const plain = manifest.tree.find((n) => n.id === 'plain');

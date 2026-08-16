@@ -6,8 +6,8 @@ import { readPngSize } from '../lib/png.js';
 
 describe('upsertGeneratedSection', () => {
   const entries = new Map([
-    ['bcg.demo.intro.title', 'Introduction'],
-    ['bcg.demo.intro.b0', 'Welcome §lhome§r'],
+    ['demo.guides.intro.title', 'Introduction'],
+    ['demo.guides.intro.b0', 'Welcome §lhome§r'],
   ]);
 
   it('appends a marker-delimited sorted section to existing content', () => {
@@ -15,19 +15,19 @@ describe('upsertGeneratedSection', () => {
     expect(out).toBe(
       'my.key=Hand written\n\n' +
         `${SECTION_BEGIN}\n` +
-        'bcg.demo.intro.b0=Welcome §lhome§r\n' +
-        'bcg.demo.intro.title=Introduction\n' +
+        'demo.guides.intro.b0=Welcome §lhome§r\n' +
+        'demo.guides.intro.title=Introduction\n' +
         `${SECTION_END}\n`,
     );
   });
 
   it('is idempotent — re-running replaces the old section', () => {
     const once = upsertGeneratedSection('my.key=Hand written\n', entries);
-    const twice = upsertGeneratedSection(once, new Map([['bcg.demo.intro.title', 'Changed']]));
+    const twice = upsertGeneratedSection(once, new Map([['demo.guides.intro.title', 'Changed']]));
     expect(twice).toContain('my.key=Hand written');
-    expect(twice).toContain('bcg.demo.intro.title=Changed');
+    expect(twice).toContain('demo.guides.intro.title=Changed');
     expect(twice).not.toContain('Welcome');
-    expect(twice.match(/<bcg:generated-guides:begin>/g)).toHaveLength(1);
+    expect(twice.match(/<core:generated-guides:begin>/g)).toHaveLength(1);
   });
 
   it('works on empty files and strips stray newlines in values', () => {
@@ -61,8 +61,8 @@ describe('reconcileLocale', () => {
   });
 
   it('summarizes drift per page', () => {
-    const keys = ['bcg.ns.intro.b0', 'bcg.ns.intro.b1', 'bcg.ns.faq.title'];
-    expect(summarizeKeysByPage(keys, 'bcg.ns')).toEqual(['intro (2 keys)', 'faq (1 key)']);
+    const keys = ['ns.guides.intro.b0', 'ns.guides.intro.b1', 'ns.guides.faq.title'];
+    expect(summarizeKeysByPage(keys, 'ns.guides')).toEqual(['intro (2 keys)', 'faq (1 key)']);
   });
 });
 
