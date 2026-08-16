@@ -14,10 +14,20 @@ regolith config resolvers --append github.com/bedrock-core/regolith-filters/reso
 |--------|-------------|
 | [**bundler**](./bundler/README.md) | Bundles TypeScript from `BP/scripts/` into a single `main.js` using esbuild. Respects `tsconfig.json`, marks Minecraft modules as external, and optionally emits source maps in debug mode. |
 | [**generator**](./generator/README.md) | Transpiles `.ts` template files in `BP/` and `RP/` into JSON output files. Supports single-file and multi-file (array) generation patterns. |
-| [**guides**](./guides/README.md) | Compiles MDX guide content (`data/guides/<locale>/**`) into a guide IR manifest plus auto-localized `.lang` entries, rendered in-game by `@bedrock-core/guides`. Must run **before** translation-keys. |
-| [**translation-keys**](./translation-keys/README.md) | Generates a JSON map of translation keys to resolved display strings by merging vanilla `en_US.lang` with your pack lang files. |
+| [**guides**](./guides/README.md) | Compiles MDX guide content (`data/guides/<locale>/**`) into a guide IR manifest plus auto-localized `.lang` entries, rendered in-game by `@bedrock-core/guides`. Must run **before** i18n. |
+| [**i18n**](./i18n/README.md) | TS-first localization: nested TypeScript resources become `.lang` files, a typed runtime bundle, and vanilla-key types — typed interpolation and plurals included. |
 
 ## Removed Filters
+
+### translation-keys (removed 2026-08-16)
+
+**Reason:** superseded by [**i18n**](./i18n/README.md), which inverts the flow — nested TypeScript
+resources are the source of truth and the `.lang` files, runtime bundle and key types are all
+generated from them, with typed interpolation, plurals, library resources and vanilla keys on top.
+
+Migration path and details: [translation-keys/README.md](./translation-keys/README.md) (the i18n
+filter ships a `from-lang` tool). Pre-removal tags still resolve and install from this repository's
+history.
 
 ### item-aux (removed 2026-06-12)
 
