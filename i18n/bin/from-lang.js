@@ -59,9 +59,9 @@ if (!namespace) {
 // merge order translation-keys used), skipping generated marker sections.
 // ---------------------------------------------------------------------------
 
-/** Strip every marker-delimited generated section (guides, i18n — any `## <bc…>` pair). */
+/** Strip every marker-delimited generated section (guides, i18n — any `## <core…>` pair). */
 function stripGeneratedSections(content) {
-  return content.replace(/^## <bc[^\n]*:begin>[\s\S]*?(?:^## <bc[^\n]*:end>[^\n]*\n?|(?![\s\S]))/gm, '');
+  return content.replace(/^## <core[^\n]*:begin>[\s\S]*?(?:^## <core[^\n]*:end>[^\n]*\n?|(?![\s\S]))/gm, '');
 }
 
 const byLocale = new Map();

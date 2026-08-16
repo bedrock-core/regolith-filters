@@ -18,51 +18,69 @@ const LOCALE_FILE_RE = /^([a-z]{2}_[A-Z]{2})\.ts$/;
  * @returns {Array<{ name: string, namespace: string, dir: string, pkgDir: string }>}
  */
 export function discoverI18nLibs(projectRoot) {
+  const seen = new Set();
+  const libs = [];
+
+  /**
+   * Walk one package's dependencies for declarers. Recurses INTO declaring
+   * libraries only (config → guides), so a library's own i18n-speaking
+   * dependencies fold in transitively without walking the whole node_modules
+   * graph. Dedupe is by real path — portals and hoisting alias the same dir.
+   */
+  const visit = (fromDir, pkg) => {
+    const names = [...new Set([
+      ...Object.keys(pkg.dependencies ?? {}),
+      ...Object.keys(pkg.devDependencies ?? {}),
+    ])].sort();
+
+    for (const name of names) {
+      // Resolve like Node: nearest node_modules first, then ancestors — package
+      // managers hoist monorepo dependencies to the workspace root.
+      const pkgDir = resolvePackageDir(fromDir, name);
+      if (!pkgDir) continue;
+
+      let real;
+      try {
+        real = fs.realpathSync(pkgDir);
+      } catch {
+        real = pkgDir;
+      }
+      if (seen.has(real)) continue;
+      seen.add(real);
+
+      let libPkg;
+      try {
+        libPkg = JSON.parse(fs.readFileSync(path.join(pkgDir, 'package.json'), 'utf-8'));
+      } catch {
+        continue;
+      }
+
+      const decl = libPkg.bedrockCore?.i18n;
+      if (decl === undefined) continue;
+
+      if (typeof decl !== 'object' || decl === null || typeof decl.dir !== 'string' || typeof decl.namespace !== 'string') {
+        throw new Error(`${name}: "bedrockCore.i18n" must be an object { dir, namespace }`);
+      }
+      if (!/^[a-z0-9_]+$/.test(decl.namespace)) {
+        throw new Error(`${name}: bedrockCore.i18n.namespace "${decl.namespace}" must be lowercase a-z0-9_`);
+      }
+
+      libs.push({ name, namespace: decl.namespace, dir: path.join(pkgDir, decl.dir), pkgDir });
+      visit(pkgDir, libPkg);
+    }
+  };
+
   const pkgPath = path.join(projectRoot, 'package.json');
   if (!fs.existsSync(pkgPath)) return [];
 
-  let pkg;
   try {
-    pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-  } catch {
-    return [];
+    visit(projectRoot, JSON.parse(fs.readFileSync(pkgPath, 'utf-8')));
+  } catch (err) {
+    if (err instanceof SyntaxError) return [];
+    throw err;
   }
 
-  const names = [...new Set([
-    ...Object.keys(pkg.dependencies ?? {}),
-    ...Object.keys(pkg.devDependencies ?? {}),
-  ])].sort();
-
-  const libs = [];
-  for (const name of names) {
-    // Resolve like Node: nearest node_modules first, then ancestors — package
-    // managers hoist monorepo dependencies to the workspace root.
-    const pkgDir = resolvePackageDir(projectRoot, name);
-    if (!pkgDir) continue;
-    const libPkgPath = path.join(pkgDir, 'package.json');
-    if (!fs.existsSync(libPkgPath)) continue;
-
-    let libPkg;
-    try {
-      libPkg = JSON.parse(fs.readFileSync(libPkgPath, 'utf-8'));
-    } catch {
-      continue;
-    }
-
-    const decl = libPkg.bedrockCore?.i18n;
-    if (decl === undefined) continue;
-
-    if (typeof decl !== 'object' || decl === null || typeof decl.dir !== 'string' || typeof decl.namespace !== 'string') {
-      throw new Error(`${name}: "bedrockCore.i18n" must be an object { dir, namespace }`);
-    }
-    if (!/^[a-z0-9_]+$/.test(decl.namespace)) {
-      throw new Error(`${name}: bedrockCore.i18n.namespace "${decl.namespace}" must be lowercase a-z0-9_`);
-    }
-
-    libs.push({ name, namespace: decl.namespace, dir: path.join(pkgDir, decl.dir), pkgDir });
-  }
-
-  return libs;
+  return libs.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /** Walk `start` and its ancestors for `node_modules/<name>` with a package.json. */

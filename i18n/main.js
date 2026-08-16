@@ -370,10 +370,6 @@ async function main() {
       report.error('namespace', `${scanned.reason} — write creator/pack as string literals in core.register(), or set the "namespace" filter setting`);
     }
   }
-  if (namespace && libGroups.has(namespace)) {
-    report.warn('namespace', `addon namespace "${namespace}" collides with a library namespace — their keys will interleave`);
-  }
-
   // ── Vanilla ───────────────────────────────────────────────────────────────
   /** @type {Map<string, Map<string, string>>} locale → 'vanilla.'-prefixed key → string */
   const vanillaEntries = new Map();
