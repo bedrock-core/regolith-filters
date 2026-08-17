@@ -3,6 +3,8 @@
 // truth for the addon's text. This filter generates everything downstream:
 //   1. RP/texts/<locale>.lang — namespaced entries the client resolves per
 //      player (marker-delimited section, coexists with the guides filter),
+//   1b. BP/texts/<locale>.lang — the `meta.*` keys ONLY, because a pack's
+//      manifest header.name/description resolve from that pack's own texts,
 //   2. data/i18n/i18n.generated.json — the runtime bundle (flat per-locale
 //      tables in {{var}} form + recorded argument order), written in the
 //      Regolith temp workspace and inlined by the bundler via the
@@ -21,7 +23,7 @@ import path from 'node:path';
 
 import { bundleDtsText } from './lib/dts.js';
 import { flattenNesting, templateVars, toPositional } from './lib/interp.js';
-import { parseLang, stripGeneratedSection, upsertGeneratedSection } from './lib/lang.js';
+import { parseLang, selectMetaEntries, stripGeneratedSection, upsertGeneratedSection } from './lib/lang.js';
 import { discoverI18nLibs, libLocaleFiles } from './lib/libs.js';
 import { loadTsModule } from './lib/load.js';
 import { scanNamespace, scanVanillaUsage, walkSources } from './lib/scan.js';
@@ -110,30 +112,46 @@ const LOCALE_FILE_RE = /^([a-z]{2}_[A-Z]{2})\.ts$/;
 // Output helpers
 // ---------------------------------------------------------------------------
 
-function writeLangSection(locale, entries) {
-  const textsDir = path.join(cwd, 'RP', 'texts');
+function writeLangSection(pack, locale, entries) {
+  const textsDir = path.join(cwd, pack, 'texts');
   fs.mkdirSync(textsDir, { recursive: true });
   const langPath = path.join(textsDir, `${locale}.lang`);
   const existing = fs.existsSync(langPath) ? fs.readFileSync(langPath, 'utf-8') : '';
   fs.writeFileSync(langPath, upsertGeneratedSection(existing, entries), 'utf-8');
-  console.log(`✅ RP/texts/${locale}.lang — ${entries.size} generated keys`);
+  console.log(`✅ ${pack}/texts/${locale}.lang — ${entries.size} generated keys`);
 }
 
-function updateLanguagesJson(locales) {
-  const languagesPath = path.join(cwd, 'RP', 'texts', 'languages.json');
+/**
+ * Drop a previously generated section without creating the file. Used on the
+ * BP side: an addon that stops declaring `meta` must not keep stale keys, but
+ * one that never declared it gets no file at all.
+ */
+function clearLangSection(pack, locale) {
+  const langPath = path.join(cwd, pack, 'texts', `${locale}.lang`);
+  if (!fs.existsSync(langPath)) return;
+  const existing = fs.readFileSync(langPath, 'utf-8');
+  const stripped = stripGeneratedSection(existing);
+  if (stripped === existing) return;
+  fs.writeFileSync(langPath, stripped, 'utf-8');
+  console.log(`✅ ${pack}/texts/${locale}.lang — generated section removed`);
+}
+
+function updateLanguagesJson(pack, locales) {
+  const languagesPath = path.join(cwd, pack, 'texts', 'languages.json');
   let existing = [];
   if (fs.existsSync(languagesPath)) {
     try {
       const parsed = JSON.parse(fs.readFileSync(languagesPath, 'utf-8'));
       if (Array.isArray(parsed)) existing = parsed;
     } catch {
-      report.warn('languages.json', 'RP/texts/languages.json is not valid JSON — rewriting it');
+      report.warn('languages.json', `${pack}/texts/languages.json is not valid JSON — rewriting it`);
     }
   }
   const merged = [...new Set([...existing, ...locales])];
   if (merged.length !== existing.length) {
+    fs.mkdirSync(path.dirname(languagesPath), { recursive: true });
     fs.writeFileSync(languagesPath, JSON.stringify(merged, null, '\t') + '\n', 'utf-8');
-    console.log(`✅ RP/texts/languages.json — ${merged.length} languages`);
+    console.log(`✅ ${pack}/texts/languages.json — ${merged.length} languages`);
   }
 }
 
@@ -456,11 +474,13 @@ async function main() {
   }
 
   // ── Lang passthrough: hand-written + guides-filter entries ──────────────────
-  // Every real key already in the pack's .lang (guide prose, pack.name,
-  // anything hand-written) rides in the bundle under `extra` so the layout
-  // engine can still measure it. Our own generated section is stripped first
-  // — those keys re-enter through the tables. This is the ONLY side channel:
-  // everything a library contributes is typed resources.
+  // Every real key already in the pack's .lang (guide prose, anything
+  // hand-written) rides in the bundle under `extra` so the layout engine can
+  // still measure it. Our own generated section is stripped first — in BOTH
+  // packs, since the BP now carries a generated `meta.*` section too — so
+  // nothing we wrote last run re-enters here; those keys come back through the
+  // tables. This is the ONLY side channel: everything a library contributes is
+  // typed resources.
   const extra = {};
   for (const locale of locales) {
     const merged = {};
@@ -475,6 +495,12 @@ async function main() {
   }
 
   // ── Emit .lang sections ───────────────────────────────────────────────────
+  // The RP gets everything; the BP gets the addon's own `meta.*` and nothing
+  // else. A manifest's header.name/description are translation keys resolved
+  // from THAT pack's own texts/<locale>.lang, so the behavior pack needs the
+  // display strings in its own file — but only those: shipping the addon's
+  // whole UI vocabulary twice would be waste.
+  let wroteBp = false;
   for (const locale of locales) {
     const entries = new Map();
     for (const [p, v] of tables.get(locale) ?? []) {
@@ -485,9 +511,20 @@ async function main() {
         report.error(`[${locale}] ${p}`, err instanceof Error ? err.message : String(err));
       }
     }
-    writeLangSection(locale, entries);
+    writeLangSection('RP', locale, entries);
+
+    const metaEntries = selectMetaEntries(entries, namespace);
+    if (metaEntries.size > 0) {
+      writeLangSection('BP', locale, metaEntries);
+      wroteBp = true;
+    } else {
+      clearLangSection('BP', locale);
+    }
   }
-  updateLanguagesJson(locales);
+  updateLanguagesJson('RP', locales);
+  // Only once the BP actually carries strings — the game needs the pack to
+  // declare its languages for the manifest fields to resolve.
+  if (wroteBp) updateLanguagesJson('BP', locales);
 
   // ── Runtime bundle (temp workspace — inlined by the bundler) ──────────────
   const bundle = {

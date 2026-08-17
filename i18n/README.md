@@ -68,6 +68,8 @@ bundle's metadata.
 | --- | --- | --- |
 | `RP/texts/<locale>.lang` | your pack | what Bedrock resolves, per player, in their language |
 | `RP/texts/languages.json` | your pack | kept in sync with the locales you author |
+| `BP/texts/<locale>.lang` | your pack | the `meta.*` keys **only** — see [Manifest display strings](#manifest-display-strings) |
+| `BP/texts/languages.json` | your pack | written alongside, so the game knows which languages the BP declares |
 | `data/i18n/i18n.generated.json` | Regolith temp | per-locale tables, interpolation arg order, namespace, and the `.lang` passthrough — inlined into the script bundle |
 | `packs/data/i18n/i18n.generated.d.ts` | your project (commit it) | types the bundle module: your resources at the root, libraries and `vanilla` grafted on |
 | `packs/data/i18n/vanilla.generated.d.ts` | your project (commit it) | the vanilla key tree, so `$.vanilla.*` autocompletes |
@@ -90,6 +92,37 @@ Add the alias to `tsconfig.json` (and keep `packs/data/**/*` in `include`):
   }
 }
 ```
+
+## Manifest display strings
+
+A pack's `manifest.json` may name itself with a translation key instead of a literal — and Bedrock
+resolves that key from **that pack's own** `texts/<locale>.lang`, never from the world's merged
+table. So a behavior pack cannot borrow the resource pack's copy: without the strings in its own
+file, the pack list shows the raw key.
+
+You already declare them once, in the `meta` branch — the same values `core.register()` receives
+through `key()`. The filter emits that branch, **and nothing else**, into `BP/texts/<locale>.lang`,
+under the same real keys the RP gets:
+
+```ts
+// packs/data/i18n/en_US.ts
+meta: { name: 'Shop', description: 'Sells items for currency', creator: 'DrAv0011' },
+```
+
+```jsonc
+// packs/BP/manifest.json — and packs/RP/manifest.json, keyed the same way
+"header": { "name": "drav0011_shop.meta.name", "description": "drav0011_shop.meta.description" }
+```
+
+The restriction to `meta.*` is the point: the BP needs the manifest fields, and shipping your whole
+UI vocabulary a second time would only bloat it. Everything else follows from reusing the RP
+machinery — every locale you author, a `BP/texts/languages.json` kept in sync, the same
+marker-delimited section (hand-written lines outside it survive, re-running is idempotent), and a
+library's keys never travelling, since they carry their namespace rather than yours.
+
+No `meta` branch means no file at all. Drop the branch from an addon that had one and the stale
+section is stripped on the next build, leaving your hand-written lines behind. If your BP `.lang`
+still carries hand-written `pack.name` / `pack.description`, this is what replaces them.
 
 ## Libraries
 
@@ -190,7 +223,12 @@ Set `strict: false` to warn instead of failing.
 ## Coexisting with the guides filter
 
 Both filters write into `RP/texts/<locale>.lang`, each inside its own marker-delimited section,
-and each rewrites only its own. Hand-written entries in the same file are left untouched.
+and each rewrites only its own. Hand-written entries in the same file are left untouched. (i18n
+uses the same markers for its `BP/texts/<locale>.lang` section; guides never writes there.)
+
+Whatever is left outside the markers — in the RP or the BP — rides in the runtime bundle's `extra`
+table so the layout engine can still measure it. Both generated sections are stripped before that
+read, so the filter never re-ingests its own keys.
 
 ## Installation
 
@@ -238,3 +276,7 @@ Nothing is destroyed: your `.lang` files are left untouched and the run summariz
 what stayed (un-namespaced keys such as `pack.name`, guide sections, other addons' keys). Then
 swap the filter in `config.json`, build once, and delete the migrated lines from `.lang` — the
 filter regenerates them, namespaced identically, inside its marker section.
+
+`pack.name` / `pack.description` are worth moving by hand: author them as `meta.name` /
+`meta.description` and point both manifest headers at `<namespace>.meta.*` — see
+[Manifest display strings](#manifest-display-strings).
