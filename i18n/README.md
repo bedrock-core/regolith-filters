@@ -95,14 +95,16 @@ Add the alias to `tsconfig.json` (and keep `packs/data/**/*` in `include`):
 
 ## Manifest display strings
 
-A pack's `manifest.json` may name itself with a translation key instead of a literal — and Bedrock
-resolves that key from **that pack's own** `texts/<locale>.lang`, never from the world's merged
-table. So a behavior pack cannot borrow the resource pack's copy: without the strings in its own
-file, the pack list shows the raw key.
+A pack's `manifest.json` may name itself with a translation key instead of a literal, and Bedrock
+resolves it from **that pack's own** `texts/<locale>.lang`, never from the world's merged table. So
+a behavior pack cannot borrow the resource pack's copy: without the strings in its own file, the
+pack list shows the raw text.
 
-You already declare them once, in the `meta` branch — the same values `core.register()` receives
-through `key()`. The filter emits that branch, **and nothing else**, into `BP/texts/<locale>.lang`,
-under the same real keys the RP gets:
+That lookup is **not** a general one. It fires only for the two literal keys `pack.name` and
+`pack.description` — a namespaced key such as `drav0011_shop.meta.name` is printed verbatim. You
+still author the strings once, in the `meta` branch (the same values `core.register()` receives
+through `key()`), and the filter emits both forms: the namespaced keys scripts resolve, and the two
+literal aliases the manifest needs.
 
 ```ts
 // packs/data/i18n/en_US.ts
@@ -111,13 +113,27 @@ meta: { name: 'Shop', description: 'Sells items for currency', creator: 'DrAv001
 
 ```jsonc
 // packs/BP/manifest.json — and packs/RP/manifest.json, keyed the same way
-"header": { "name": "drav0011_shop.meta.name", "description": "drav0011_shop.meta.description" }
+"header": { "name": "pack.name", "description": "pack.description" }
 ```
 
-The restriction to `meta.*` is the point: the BP needs the manifest fields, and shipping your whole
-UI vocabulary a second time would only bloat it. Everything else follows from reusing the RP
-machinery — every locale you author, a `BP/texts/languages.json` kept in sync, the same
-marker-delimited section (hand-written lines outside it survive, re-running is idempotent), and a
+```lang
+# BP/texts/en_US.lang, generated
+drav0011_shop.meta.creator=DrAv0011
+drav0011_shop.meta.description=Sells items for currency
+drav0011_shop.meta.name=Shop
+pack.description=Sells items for currency
+pack.name=Shop
+```
+
+The aliases go into **both** packs, since each has a manifest of its own; the namespaced `meta.*`
+keys go to the RP with everything else and to the BP alone. That restriction is the point: the BP
+needs the manifest fields, and shipping your whole UI vocabulary a second time would only bloat it.
+(`pack.*` is un-namespaced by Bedrock's design — every add-on's copy lands in the same merged
+client table. Harmless for the manifest, which reads per pack, but don't reference `pack.name` from
+scripts or UI: use `key('meta.name')`.)
+
+Everything else follows from reusing the RP machinery — every locale you author, a
+`BP/texts/languages.json` kept in sync, the same marker-delimited section (hand-written lines outside it survive, re-running is idempotent), and a
 library's keys never travelling, since they carry their namespace rather than yours.
 
 No `meta` branch means no file at all. Drop the branch from an addon that had one and the stale
@@ -278,5 +294,6 @@ swap the filter in `config.json`, build once, and delete the migrated lines from
 filter regenerates them, namespaced identically, inside its marker section.
 
 `pack.name` / `pack.description` are worth moving by hand: author them as `meta.name` /
-`meta.description` and point both manifest headers at `<namespace>.meta.*` — see
+`meta.description`, delete the hand-written lines, and leave both manifest headers pointing at
+`pack.name` / `pack.description` — the filter regenerates those two as aliases. See
 [Manifest display strings](#manifest-display-strings).

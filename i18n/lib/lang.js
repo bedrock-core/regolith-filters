@@ -82,3 +82,36 @@ export function upsertGeneratedSection(content, entries) {
 
   return (base ? base + '\n\n' : '') + lines.join('\n') + '\n';
 }
+
+/**
+ * The two literal keys Bedrock resolves a manifest header from. This is NOT a
+ * general key lookup: the client reads `header.name` / `header.description`
+ * only when they are exactly these strings, so `<namespace>.meta.name` in a
+ * manifest shows up as the raw key in the pack list.
+ */
+export const MANIFEST_ALIASES = [
+  ['name', 'pack.name'],
+  ['description', 'pack.description'],
+];
+
+/**
+ * Mirror the addon's `meta.name` / `meta.description` onto the literal
+ * `pack.name` / `pack.description` keys, so a manifest can point at them.
+ *
+ * The namespaced originals stay — scripts resolve those through `key()`, and
+ * they are what travels in the runtime bundle. These are aliases, emitted into
+ * each pack's own generated section (both packs: RP and BP each have a
+ * manifest of their own, and each resolves from its own texts file).
+ *
+ * @param {Map<string, string>} entries   generated entries, real keys
+ * @param {string} namespace              the addon's namespace
+ * @returns {Map<string, string>} empty when neither display string is declared
+ */
+export function manifestAliasEntries(entries, namespace) {
+  const out = new Map();
+  for (const [leaf, alias] of MANIFEST_ALIASES) {
+    const value = entries.get(`${namespace}.${META_BRANCH}.${leaf}`);
+    if (value !== undefined) out.set(alias, value);
+  }
+  return out;
+}

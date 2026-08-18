@@ -4,7 +4,9 @@
 //   1. RP/texts/<locale>.lang — namespaced entries the client resolves per
 //      player (marker-delimited section, coexists with the guides filter),
 //   1b. BP/texts/<locale>.lang — the `meta.*` keys ONLY, because a pack's
-//      manifest header.name/description resolve from that pack's own texts,
+//      manifest header.name/description resolve from that pack's own texts;
+//      both packs also get `pack.name`/`pack.description` aliases, the only
+//      two keys Bedrock's manifest lookup actually recognises,
 //   2. data/i18n/i18n.generated.json — the runtime bundle (flat per-locale
 //      tables in {{var}} form + recorded argument order), written in the
 //      Regolith temp workspace and inlined by the bundler via the
@@ -23,7 +25,7 @@ import path from 'node:path';
 
 import { bundleDtsText } from './lib/dts.js';
 import { flattenNesting, templateVars, toPositional } from './lib/interp.js';
-import { parseLang, selectMetaEntries, stripGeneratedSection, upsertGeneratedSection } from './lib/lang.js';
+import { manifestAliasEntries, parseLang, selectMetaEntries, stripGeneratedSection, upsertGeneratedSection } from './lib/lang.js';
 import { discoverI18nLibs, libLocaleFiles } from './lib/libs.js';
 import { loadTsModule } from './lib/load.js';
 import { scanNamespace, scanVanillaUsage, walkSources } from './lib/scan.js';
@@ -496,10 +498,15 @@ async function main() {
 
   // ── Emit .lang sections ───────────────────────────────────────────────────
   // The RP gets everything; the BP gets the addon's own `meta.*` and nothing
-  // else. A manifest's header.name/description are translation keys resolved
-  // from THAT pack's own texts/<locale>.lang, so the behavior pack needs the
-  // display strings in its own file — but only those: shipping the addon's
-  // whole UI vocabulary twice would be waste.
+  // else. A manifest's header.name/description are resolved from THAT pack's
+  // own texts/<locale>.lang, so the behavior pack needs the display strings in
+  // its own file — but only those: shipping the addon's whole UI vocabulary
+  // twice would be waste.
+  //
+  // Bedrock's manifest lookup is not a general key lookup: it fires only for
+  // the literal keys `pack.name` / `pack.description`. So both packs also get
+  // those two as aliases of `meta.name` / `meta.description` — the namespaced
+  // originals stay, since that is what `key()` and the runtime bundle use.
   let wroteBp = false;
   for (const locale of locales) {
     const entries = new Map();
@@ -511,11 +518,13 @@ async function main() {
         report.error(`[${locale}] ${p}`, err instanceof Error ? err.message : String(err));
       }
     }
-    writeLangSection('RP', locale, entries);
+    const aliases = manifestAliasEntries(entries, namespace);
+
+    writeLangSection('RP', locale, new Map([...entries, ...aliases]));
 
     const metaEntries = selectMetaEntries(entries, namespace);
     if (metaEntries.size > 0) {
-      writeLangSection('BP', locale, metaEntries);
+      writeLangSection('BP', locale, new Map([...metaEntries, ...aliases]));
       wroteBp = true;
     } else {
       clearLangSection('BP', locale);

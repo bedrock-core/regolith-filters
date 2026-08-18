@@ -14,7 +14,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { parseLang, selectMetaEntries, stripGeneratedSection } from '../lib/lang.js';
+import { manifestAliasEntries, parseLang, selectMetaEntries, stripGeneratedSection } from '../lib/lang.js';
 
 const MAIN = fileURLToPath(new URL('../main.js', import.meta.url));
 const NAMESPACE = 'drav0011_shop';
@@ -78,6 +78,27 @@ describe('selectMetaEntries', () => {
   });
 });
 
+describe('manifestAliasEntries', () => {
+  it('mirrors name/description onto the literal keys Bedrock resolves', () => {
+    const entries = new Map([
+      [`${NAMESPACE}.meta.name`, 'Shop'],
+      [`${NAMESPACE}.meta.description`, 'Sells items'],
+      [`${NAMESPACE}.meta.creator`, 'DrAv0011'],
+      [`${NAMESPACE}.shop.title`, 'Shop'],
+    ]);
+    expect([...manifestAliasEntries(entries, NAMESPACE)]).toEqual([
+      ['pack.name', 'Shop'],
+      ['pack.description', 'Sells items'],
+    ]);
+  });
+
+  it('aliases only what is declared', () => {
+    const entries = new Map([[`${NAMESPACE}.meta.creator`, 'DrAv0011']]);
+    expect(manifestAliasEntries(entries, NAMESPACE).size).toBe(0);
+    expect(manifestAliasEntries(new Map([['core.meta.name', 'Core']]), NAMESPACE).size).toBe(0);
+  });
+});
+
 describe('BP/texts emit', () => {
   it('writes the meta keys to the BP and the full set to the RP', () => {
     const work = scaffold(WITH_META);
@@ -87,8 +108,12 @@ describe('BP/texts emit', () => {
       [`${NAMESPACE}.meta.name`]: 'Shop',
       [`${NAMESPACE}.meta.description`]: 'Sells items',
       [`${NAMESPACE}.meta.creator`]: 'DrAv0011',
+      // Bedrock only resolves a manifest header from these two literal keys.
+      'pack.name': 'Shop',
+      'pack.description': 'Sells items',
     });
-    // Non-meta keys stay out of the BP, and the RP still carries everything.
+    // Non-meta keys stay out of the BP, and the RP still carries everything —
+    // plus the same aliases, since the RP has a manifest of its own.
     expect(read(work, 'BP/texts/en_US.lang')).not.toContain('shop.title');
     expect(Object.keys(parseLang(read(work, 'RP/texts/en_US.lang'))).sort()).toEqual([
       `${NAMESPACE}.meta.creator`,
@@ -96,8 +121,10 @@ describe('BP/texts emit', () => {
       `${NAMESPACE}.meta.name`,
       `${NAMESPACE}.shop.bought`,
       `${NAMESPACE}.shop.title`,
+      'pack.description',
+      'pack.name',
     ]);
-    expect(log).toContain('✅ BP/texts/en_US.lang — 3 generated keys');
+    expect(log).toContain('✅ BP/texts/en_US.lang — 5 generated keys');
   });
 
   it('preserves hand-written BP entries outside the markers', () => {
@@ -131,6 +158,8 @@ describe('BP/texts emit', () => {
     run(work);
 
     expect(parseLang(read(work, 'BP/texts/es_ES.lang'))[`${NAMESPACE}.meta.name`]).toBe('Tienda');
+    expect(parseLang(read(work, 'BP/texts/es_ES.lang'))['pack.name']).toBe('Tienda');
+    expect(parseLang(read(work, 'RP/texts/es_ES.lang'))['pack.description']).toBe('Vende objetos');
     expect(JSON.parse(read(work, 'BP/texts/languages.json'))).toEqual(['en_US', 'es_ES']);
   });
 
