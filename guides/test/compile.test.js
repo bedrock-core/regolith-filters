@@ -32,10 +32,21 @@ describe('block compilation', () => {
     expect(lang.get('bcg.test.page.b1.r0')).toBe('Body text.');
   });
 
-  it('prefers frontmatter title and keeps content headings', () => {
-    const { blocks, lang } = page('---\ntitle: Custom\n---\n\n# Kept\n');
+  it('prefers the frontmatter title, and still takes the leading h1 out of the body', () => {
+    // `title:` names the page for the sidebar and the header. A leading h1 names it too, so
+    // keeping both printed it twice — once in the header, once as the first block of prose.
+    const { blocks, lang } = page('---\ntitle: Custom\n---\n\n# Graves\n\nBody.\n');
     expect(lang.get('bcg.test.page.title')).toBe('Custom');
-    expect(blocks).toEqual([{ t: 'h', l: 1, k: 'bcg.test.page.b0' }]);
+    expect(blocks).toEqual([{ t: 'p', runs: [{ k: 'bcg.test.page.b0.r0' }] }]);
+    expect(lang.get('bcg.test.page.b0.r0')).toBe('Body.');
+  });
+
+  it('leaves a NON-leading h1 alone — only the page title is special', () => {
+    const { blocks } = page('---\ntitle: Custom\n---\n\nIntro.\n\n# Later\n');
+    expect(blocks).toEqual([
+      { t: 'p', runs: [{ k: 'bcg.test.page.b0.r0' }] },
+      { t: 'h', l: 1, k: 'bcg.test.page.b1' },
+    ]);
   });
 
   it('falls back to a humanized filename title', () => {

@@ -98,8 +98,10 @@ Markdown/MDX subset supported in v1 (parsed with remark + remark-gfm + remark-di
 remark-mdx — both `.md` and `.mdx` run through the same MDX-enabled pipeline, so escape literal
 `<` as `\<`):
 
-- **Headings** `#`–`###` (deeper clamps to 3). A leading `# H1` becomes the page title unless
-  frontmatter `title` is set (then it stays in the body).
+- **Headings** `#`–`###` (deeper clamps to 3). A leading `# H1` is the page title and is taken
+  out of the body — the page header renders it. Frontmatter `title` wins over it for the value,
+  but the h1 comes out either way: `title:` names the page for the sidebar and the header, it is
+  never content. Only a LEADING h1 is treated this way; one further down stays put.
 - **Frontmatter**: `title`, `sidebar_position`, `hidden` (compiled but out of sidebar/pagination),
   `icon` (RP texture path shown as the sidebar row thumbnail; ≤80 chars), `description` (a
   one-line, localized subtitle under the row title — kept short), `home` (see below), `access`

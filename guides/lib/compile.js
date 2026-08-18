@@ -284,13 +284,17 @@ export function compilePage(root, ctx) {
     return blocks;
   };
 
-  // Title: frontmatter wins; otherwise a leading h1 becomes the title and is
-  // removed from the content (it renders in the page header instead); last
-  // resort is the caller-provided fallback (humanized filename).
+  // Title: frontmatter wins for the VALUE; a leading h1 supplies it otherwise; last resort is
+  // the caller-provided fallback (humanized filename).
+  //
+  // The h1 comes out of the body either way. It names the page, and the page header already
+  // renders that — so leaving it in when frontmatter also named the page printed the title
+  // twice, once in the header and again as the first block of prose. `title:` is for the
+  // sidebar and the header; it is never content.
   let children = root.children;
   let title = typeof ctx.frontmatter.title === 'string' ? ctx.frontmatter.title : undefined;
-  if (title === undefined && children[0]?.type === 'heading' && children[0].depth === 1) {
-    title = inlineText(children[0].children).runs.map(r => r.text).join('');
+  if (children[0]?.type === 'heading' && children[0].depth === 1) {
+    title ??= inlineText(children[0].children).runs.map(r => r.text).join('');
     children = children.slice(1);
   }
   title ??= ctx.fallbackTitle ?? '';
