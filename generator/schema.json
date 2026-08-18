@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema",
   "$id": "core-generator",
   "type": "object",
-  "description": "Regolith filter for generating JSON files from TypeScript templates (single or multiple) for Minecraft Bedrock Edition.",
+  "description": "Regolith filter for generating JSON files from TypeScript templates (single or multiple) for Minecraft Bedrock Edition, typed against the official Mojang schemas.",
   "properties": {
     "include": {
       "description": "Glob pattern(s) to scan for template .ts files. Paths are relative to temp workspace; 'packs/' prefix is automatically stripped if present.",
@@ -44,6 +44,39 @@
       "type": "boolean",
       "description": "Pretty-print generated JSON (four-space indentation). If false, outputs minified JSON.",
       "default": true
+    },
+    "types": {
+      "type": "boolean",
+      "description": "Generate .d.ts files from the official Mojang JSON schemas so templates autocomplete. Written into the project (not the temp workspace) so the IDE can read them.",
+      "default": true
+    },
+    "schemaVersion": {
+      "type": "string",
+      "description": "Version of @minecraft/bedrock-schemas to generate from. Accepts a dist-tag ('latest', 'beta') or an exact version such as '1.26.20-beta.21'.",
+      "default": "latest"
+    },
+    "typesDir": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Where the generated .d.ts files land, relative to the project root. Defaults to '<dataPath>/generated/mc' (usually 'packs/data/generated/mc').",
+      "default": null
+    },
+    "strict": {
+      "type": "boolean",
+      "description": "Reject properties the schema does not declare. Off by default, because the schemas trail the game by a version or two and would otherwise flag valid fields.",
+      "default": false
+    },
+    "typePrefix": {
+      "type": "string",
+      "description": "Prefix for the generated global type aliases. Empty by default, giving `Block`, `Entity`, `Item`, `Many`. Set it to something like \"Mc\" if those names clash with your own globals.",
+      "default": ""
+    },
+    "maxAgeHours": {
+      "type": "number",
+      "description": "How long the cached npm registry metadata stays fresh before the filter re-checks for a newer schema release. Only consulted when schemaVersion is a dist-tag.",
+      "default": 24
     }
   }
 }

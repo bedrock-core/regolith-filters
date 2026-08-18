@@ -5,6 +5,12 @@ const { globSync } = require("glob");
 const esbuild = require("esbuild");
 const json5 = require("json5");
 
+const { ensureSchemaPackage, PACKAGE_NAME } = require("./lib/schemas");
+const { compileCatalog, indexDtsText, globalsDtsText } = require("./lib/dts");
+
+/** Where the category tag from `defineTemplate`/`defineMany` is stashed. */
+const TEMPLATE_CATEGORY = Symbol.for("@bedrock-core/generator.category");
+
 const projectRoot = process.env.ROOT_DIR;
 
 if (!projectRoot) {
@@ -18,6 +24,12 @@ const defaults = {
   include: ["BP/**/*.ts", "RP/**/*.ts"],
   exclude: ["BP/scripts/**", "**/*.d.ts"],
   pretty: true,
+  types: true,
+  schemaVersion: "latest",
+  typesDir: null,
+  strict: false,
+  typePrefix: "",
+  maxAgeHours: 24,
 };
 
 const argParsed = process.argv[2] ? JSON.parse(process.argv[2]) : {};
@@ -96,8 +108,15 @@ console.log("📦 Packs (temp):", { BP: bpDir, RP: rpDir });
 
 function assertNoImports(source, file) {
   // Simple guard: if the file contains import/export from other modules, block it
-  // allow 'export const params' and 'export default' but disallow import statements
-  if (/\bimport\s+[^;]+;/.test(source) || /\brequire\s*\(/.test(source)) {
+  // allow 'export const params' and 'export default' but disallow import statements.
+  // `import type` is exempt: esbuild erases it during transpile, so it never
+  // reaches the sandbox — and it is what lets templates pull in the generated
+  // Minecraft schema types.
+  // Matched up to the module specifier rather than to a semicolon, so that
+  // multi-line and semicolon-less type imports are both recognised.
+  const runtime = source.replace(/\bimport\s+type\b[\s\S]*?from\s*['"][^'"]+['"]\s*;?/g, "");
+
+  if (/\bimport\s+[^;]+;/.test(runtime) || /\brequire\s*\(/.test(runtime)) {
     throw new Error(`Imports are not allowed in template files: ${file}`);
   }
 }
@@ -121,6 +140,33 @@ async function transpileTsToCjs(source, file) {
   }
 }
 
+/**
+ * `defineTemplate` / `defineMany` exist so templates get a place to hang a
+ * category tag — the tag is what lets TypeScript pick the right Minecraft
+ * document type and infer the item parameter of the callbacks. At runtime they
+ * are almost identity functions; the tag is kept as a non-enumerable property
+ * so it never lands in the emitted JSON but stays available for validation.
+ */
+function makeTemplateHelpers() {
+  const tag = (value, category) => {
+    if (category && value && typeof value === "object") {
+      Object.defineProperty(value, TEMPLATE_CATEGORY, { value: category, enumerable: false });
+    }
+    return value;
+  };
+
+  return {
+    defineTemplate: (categoryOrData, maybeData) =>
+      typeof categoryOrData === "string" ? tag(maybeData, categoryOrData) : categoryOrData,
+
+    defineMany: (...args) => {
+      const category = typeof args[0] === "string" ? args.shift() : null;
+      const [nameFn, dataFn, items] = args;
+      return tag([nameFn, dataFn, items], category);
+    },
+  };
+}
+
 function evaluateModule(cjsCode, file) {
   const sandbox = {
     module: { exports: {} },
@@ -133,6 +179,7 @@ function evaluateModule(cjsCode, file) {
     setTimeout,
     clearTimeout,
     Buffer,
+    ...makeTemplateHelpers(),
   };
   // Link exports to module.exports just like Node's CJS wrapper
   sandbox.exports = sandbox.module.exports;
@@ -238,8 +285,97 @@ async function processTsFile(file) {
   );
 }
 
+/**
+ * The generated .d.ts files are what the IDE reads, so they go to the real
+ * project rather than Regolith's temp copy — and only when the content
+ * actually changed, so watch mode does not re-trigger itself.
+ */
+function writeProjectFileIfChanged(relPath, content) {
+  const abs = path.join(projectRoot, relPath);
+  if (fs.existsSync(abs) && fs.readFileSync(abs, "utf8") === content) return false;
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  fs.writeFileSync(abs, content, "utf8");
+  return true;
+}
+
+/** Regolith's data path on real disk (packs/data unless the project moved it). */
+function projectDataPath() {
+  try {
+    const cfg = json5.parse(fs.readFileSync(path.join(projectRoot, "config.json"), "utf8"));
+    if (typeof cfg?.regolith?.dataPath === "string") return cfg.regolith.dataPath;
+  } catch {
+    // fall through to the default
+  }
+  return "packs/data";
+}
+
+/**
+ * Download the official Mojang schemas (cached) and compile them into the
+ * project. Skipped entirely when the marker already records the same schema
+ * package version and settings, so only the first build after a version bump
+ * pays for it.
+ */
+async function generateTypes() {
+  const outRel = (settings.typesDir || path.posix.join(projectDataPath(), "generated", "mc"))
+    .replace(/\\/g, "/")
+    .replace(/\/$/, "");
+  const outAbs = path.join(projectRoot, outRel);
+  const cacheDir = path.join(projectRoot, ".regolith", "cache", "generator");
+  const markerFile = path.join(outAbs, ".generated");
+
+  const log = (msg) => console.log(`   ${msg}`);
+
+  console.log("🧬 Preparing Minecraft schema types...");
+
+  const { version, root: pkgRoot } = await ensureSchemaPackage({
+    version: String(settings.schemaVersion || "latest"),
+    cacheDir,
+    maxAgeHours: Number(settings.maxAgeHours) || 24,
+    log,
+  });
+
+  const marker = `${version} strict=${settings.strict ? 1 : 0} prefix=${settings.typePrefix || ""}`;
+  if (fs.existsSync(markerFile) && fs.readFileSync(markerFile, "utf8") === marker) {
+    console.log(`   ✅ types already up to date (${PACKAGE_NAME}@${version})`);
+    return;
+  }
+
+  // A stale tree would leave types for categories the new version dropped, so
+  // the directory is rebuilt from scratch — but only once it is confirmed to be
+  // ours. `typesDir` is user-supplied, and pointing it at an existing folder
+  // must not delete that folder's contents.
+  if (fs.existsSync(outAbs)) {
+    if (!fs.existsSync(markerFile) && fs.readdirSync(outAbs).length > 0) {
+      throw new Error(
+        `Refusing to overwrite ${outRel} — it already has content and was not written by this filter. ` +
+          `Point 'typesDir' at a dedicated folder, or empty this one.`,
+      );
+    }
+    fs.rmSync(outAbs, { recursive: true, force: true });
+  }
+
+  const categories = await compileCatalog({
+    pkgRoot,
+    outDir: outAbs,
+    strict: Boolean(settings.strict),
+    typePrefix: String(settings.typePrefix || ""),
+    log,
+  });
+
+  if (!categories.length) throw new Error("No schema categories compiled");
+
+  writeProjectFileIfChanged(path.posix.join(outRel, "index.d.ts"), indexDtsText(categories, version));
+  writeProjectFileIfChanged(path.posix.join(outRel, "globals.d.ts"), globalsDtsText(categories, String(settings.typePrefix || "")));
+  fs.writeFileSync(markerFile, marker, "utf8");
+
+  console.log(`   ✅ ${categories.length} categories -> ${outRel}/`);
+  console.log(`   ℹ️  make sure your tsconfig "include" covers ${outRel}/globals.d.ts`);
+}
+
 async function main() {
   try {
+    if (settings.types) await generateTypes();
+
     console.log("🔎 Scanning for templates...");
     const files = settings.include
       .flatMap((pattern) => globSync(pattern, { ignore: settings.exclude }))
