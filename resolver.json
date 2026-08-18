@@ -2,19 +2,19 @@
   "formatVersion": "1.0.0",
   "filters": {
     "bundler": {
-      "url": "github.com/bedrock-core/regolith-filters/bundler"
+      "url": "github.com/bedrock-core/regolith-filters"
     },
     "generator": {
-      "url": "github.com/bedrock-core/regolith-filters/generator"
+      "url": "github.com/bedrock-core/regolith-filters"
     },
     "guides": {
-      "url": "github.com/bedrock-core/regolith-filters/guides"
+      "url": "github.com/bedrock-core/regolith-filters"
     },
     "i18n": {
-      "url": "github.com/bedrock-core/regolith-filters/i18n"
+      "url": "github.com/bedrock-core/regolith-filters"
     },
     "translation-keys": {
-      "url": "github.com/bedrock-core/regolith-filters/translation-keys"
+      "url": "github.com/bedrock-core/regolith-filters"
     }
   }
 }
