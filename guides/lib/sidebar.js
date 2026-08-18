@@ -2,6 +2,11 @@
 // folder structure defines categories, `_category_.json` files control label /
 // position / collapsed / link, frontmatter `sidebar_position` orders pages,
 // ordering falls back to alphabetical, prev/next follow sidebar DFS order.
+//
+// The tree is built ONCE, for the widest audience, with gated nodes marked (`a`) rather than
+// removed — the renderer prunes it per viewer. Pagination cannot be pruned that cheaply (DFS
+// order slots a category's `link` page ahead of its children), so both chains are walked here:
+// `order` for an operator, `publicOrder` for everyone else.
 
 import { catKey } from './keys.js';
 import { humanizeFilename } from './parse.js';
@@ -13,9 +18,10 @@ import { humanizeFilename } from './parse.js';
  * @param {string} input.prefix                   key prefix ('bcg.<ns>')
  * @param {(key: string, value: string) => void} input.addLang
  * @param {(msg: string) => void} input.warn
- * @returns {{ tree: Array, order: string[] }}    order = PageIds in DFS order
+ * @param {{ forDir: Function, forPage: Function }} input.access  effective access resolver
+ * @returns {{ tree: Array, order: string[], publicOrder: string[] }}  orders = PageIds in DFS order
  */
-export function buildSidebar({ pages, categories, prefix, addLang, warn }) {
+export function buildSidebar({ pages, categories, prefix, addLang, warn, access }) {
   // Group page ids and child directories per directory path ('' = root).
   const dirPages = new Map(); // dirPath → PageId[]
   const dirChildren = new Map(); // dirPath → Set<childDirPath>
@@ -62,6 +68,8 @@ export function buildSidebar({ pages, categories, prefix, addLang, warn }) {
       const page = pages.get(pageId);
       if (page.frontmatter.hidden === true) continue;
       const node = { t: 'page', id: pageId, titleK: page.titleK };
+      const pageAccess = access.forPage(pageId, page.frontmatter);
+      if (pageAccess !== undefined) node.a = pageAccess;
       if (page.icon !== undefined) node.icon = page.icon;
       if (page.descK !== undefined) node.descK = page.descK;
       entries.push({
@@ -77,6 +85,8 @@ export function buildSidebar({ pages, categories, prefix, addLang, warn }) {
       addLang(labelK, typeof category.label === 'string' ? category.label : humanizeFilename(dirName));
 
       const node = { t: 'cat', id: childDir, labelK, children: buildDir(childDir) };
+      const dirAccess = access.forDir(childDir);
+      if (dirAccess !== undefined) node.a = dirAccess;
       if (category.collapsed === true) node.collapsed = true;
       if (typeof category.icon === 'string' && category.icon !== '') node.icon = category.icon;
       const link = resolveCategoryLink(childDir, category.link);
@@ -96,27 +106,44 @@ export function buildSidebar({ pages, categories, prefix, addLang, warn }) {
 
   // DFS page order for prev/next: a category's link page slots in ahead of
   // its children (it acts as the category's landing page).
-  const order = [];
-  const seen = new Set();
-  const visit = (nodes) => {
-    for (const node of nodes) {
-      if (node.t === 'page') {
-        if (!seen.has(node.id)) {
-          seen.add(node.id);
-          order.push(node.id);
-        }
-      } else {
-        if (node.link !== undefined && !seen.has(node.link)) {
-          seen.add(node.link);
-          order.push(node.link);
-        }
-        visit(node.children);
-      }
-    }
-  };
-  visit(tree);
+  //
+  // `includeGated: false` walks the same tree as a non-operator sees it. A gated category is
+  // skipped whole — its children inherited that gate, so descending could only re-skip them —
+  // and a category `link` is tested by PAGE rather than by node, because a link may point at a
+  // gated (or hidden) page the category itself does not carry.
+  const buildOrder = (includeGated) => {
+    const out = [];
+    const seen = new Set();
 
-  return { tree, order };
+    const gatedPage = (pageId) => access.forPage(pageId, (pages.get(pageId) ?? {}).frontmatter ?? {}) !== undefined;
+
+    const pushPage = (pageId) => {
+      if (seen.has(pageId)) return;
+      if (!includeGated && gatedPage(pageId)) return;
+      seen.add(pageId);
+      out.push(pageId);
+    };
+
+    const visit = (nodes) => {
+      for (const node of nodes) {
+        if (!includeGated && node.a !== undefined) continue;
+        if (node.t === 'page') {
+          pushPage(node.id);
+        } else {
+          if (node.link !== undefined) pushPage(node.link);
+          visit(node.children);
+        }
+      }
+    };
+
+    visit(tree);
+    return out;
+  };
+
+  const order = buildOrder(true);
+  const publicOrder = buildOrder(false);
+
+  return { tree, order, publicOrder };
 }
 
 function numberOr(value, fallback) {

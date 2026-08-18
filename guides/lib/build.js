@@ -1,6 +1,7 @@
 // Locale build + manifest assembly — pure (no filesystem); main.js feeds it
 // file contents and receives structures to write.
 
+import { createAccessResolver } from './access.js';
 import { ADMONITION_COLORS, compilePage } from './compile.js';
 import { resolveInternalLink } from './inline.js';
 import { catKey, pageKey } from './keys.js';
@@ -99,7 +100,9 @@ export function buildLocale({ files, categories, prefix, maxCodeLineBytes, linkT
  * @param {{ warn(scope: string, msg: string): void }} input.report
  */
 export function buildManifest({ build, categories, prefix, ns, defaultLocale, locales, report }) {
-  const { tree, order } = buildSidebar({
+  const access = createAccessResolver({ categories, warn: (msg) => report.warn('access', msg) });
+
+  const { tree, order, publicOrder } = buildSidebar({
     pages: build.pages,
     categories,
     prefix,
@@ -107,18 +110,39 @@ export function buildManifest({ build, categories, prefix, ns, defaultLocale, lo
       if (!build.lang.has(key)) build.lang.set(key, value);
     },
     warn: (msg) => report.warn('sidebar', msg),
+    access,
   });
 
   const pages = {};
   for (const [pageId, page] of build.pages) {
     pages[pageId] = { id: pageId, titleK: page.titleK, blocks: page.blocks };
+
+    // Effective access, so a page hidden from the sidebar still says who it is for: `hidden`
+    // pages stay linkable, and a link is exactly how a non-operator would otherwise reach one.
+    const pageAccess = access.forPage(pageId, page.frontmatter);
+
+    if (pageAccess !== undefined) pages[pageId].a = pageAccess;
   }
+
   order.forEach((pageId, i) => {
     if (i > 0) pages[pageId].prev = order[i - 1];
     if (i < order.length - 1) pages[pageId].next = order[i + 1];
   });
 
   const manifest = { v: 1, ns, defaultLocale, locales, tree, pages };
+
+  // A guide with nothing gated compiles exactly as it did before this feature existed: no
+  // `gated` flag, no second chain, not a byte of payload spent on an audience split that
+  // does not exist. The flag is what tells the renderer the second chain is there to use.
+  if (access.used()) {
+    manifest.gated = true;
+
+    publicOrder.forEach((pageId, i) => {
+      if (i > 0) pages[pageId].pprev = publicOrder[i - 1];
+      if (i < publicOrder.length - 1) pages[pageId].pnext = publicOrder[i + 1];
+    });
+  }
+
   const home = resolveHome(build.pages, report);
 
   if (home !== undefined) manifest.home = home;

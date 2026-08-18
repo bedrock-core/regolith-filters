@@ -19,7 +19,7 @@ packs/data/guides/
 ├── en_US/                      ← defaultLocale: structure, keys, sidebar, fallbacks
 │   ├── intro.mdx
 │   └── getting-started/
-│       ├── _category_.json     ← Docusaurus-style: label / position / collapsed / link / icon
+│       ├── _category_.json     ← Docusaurus-style: label / position / collapsed / link / icon / access
 │       ├── installation.mdx
 │       └── first-screen.mdx
 └── es_ES/                      ← translations: same tree, values only
@@ -102,12 +102,19 @@ remark-mdx — both `.md` and `.mdx` run through the same MDX-enabled pipeline, 
   frontmatter `title` is set (then it stays in the body).
 - **Frontmatter**: `title`, `sidebar_position`, `hidden` (compiled but out of sidebar/pagination),
   `icon` (RP texture path shown as the sidebar row thumbnail; ≤80 chars), `description` (a
-  one-line, localized subtitle under the row title — kept short), `home` (see below).
+  one-line, localized subtitle under the row title — kept short), `home` (see below), `access`
+  (see below).
 - **`home: true`** makes that page the one the guide opens on, instead of its sidebar — for when
   the sidebar is not the introduction you would have written. The sidebar stays one press away
   while there is more than one page; a single-page guide drops it entirely, with or without
   `home`. Pairs naturally with `hidden: true`, since a landing page is usually not also a sidebar
   row. Two pages claiming it is a warning, not an error: the first in document order wins.
+- **`access: op`** keeps a page for world operators. Set it on a page's frontmatter, or on a
+  `_category_.json` to gate that whole section — access inherits downward and a child cannot
+  widen it back out. The renderer resolves the sidebar, landing page, prev/next chain, and
+  inline links per audience, so a non-operator sees a guide that reads as if the gated pages
+  were never written. Presentation, not protection: the manifest replicates world-wide and the
+  prose ships in the pack's `.lang`.
 - **Inline styles** baked into `.lang` values as `§` codes: `**bold**`→`§l`, `*italic*`→`§o`,
   `` `code` ``→`§7`, `~~strike~~`→`§8` (dim — Bedrock has no strikethrough), links→`§9`.
 - **Links**: internal links (`./page.mdx`, `../intro`, `/abs/page`) are validated at build time

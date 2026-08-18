@@ -150,3 +150,80 @@ describe('buildManifest', () => {
     expect(report.warnings.some((w) => w.includes('80'))).toBe(true);
   });
 });
+
+describe('buildManifest access', () => {
+  // intro (public) -> ops (op) -> admin/* (op via its category) -> faq (public), so both
+  // chains have to skip over something.
+  const page = (...lines) => ['---', ...lines, '---', '', 'Text.', ''].join('\n');
+
+  const GATED = new Map([
+    ['intro', page('title: Introduction', 'sidebar_position: 1')],
+    ['ops', page('title: Ops', 'sidebar_position: 2', 'access: op')],
+    ['admin/tools', page('title: Tools', 'sidebar_position: 1')],
+    ['admin/keys', page('title: Keys', 'sidebar_position: 2', 'access: op')],
+    ['faq', page('title: FAQ', 'sidebar_position: 4')],
+  ]);
+  const GATED_CATEGORIES = new Map([['admin', { label: 'Admin', position: 3, access: 'op' }]]);
+
+  const gatedBuild = () => build({ files: GATED, categories: GATED_CATEGORIES });
+
+  it('leaves an ungated guide byte-identical to before the feature', () => {
+    const { manifest } = build();
+
+    expect(manifest.gated).toBeUndefined();
+    expect(JSON.stringify(manifest)).not.toContain('"a"');
+    expect(JSON.stringify(manifest)).not.toContain('pprev');
+  });
+
+  it('marks gated pages and categories, and inherits down a gated category', () => {
+    const { manifest } = gatedBuild();
+
+    expect(manifest.gated).toBe(true);
+    expect(manifest.pages['ops'].a).toBe('op');
+    expect(manifest.pages['intro'].a).toBeUndefined();
+
+    // admin/tools declares nothing; its category gates it anyway.
+    expect(manifest.pages['admin/tools'].a).toBe('op');
+    expect(manifest.pages['admin/keys'].a).toBe('op');
+
+    const cat = manifest.tree.find((n) => n.t === 'cat');
+    expect(cat).toMatchObject({ id: 'admin', a: 'op' });
+    expect(cat.children.every((n) => n.a === 'op')).toBe(true);
+  });
+
+  it('bakes an operator chain over every page and a public chain that skips gated ones', () => {
+    const p = gatedBuild().manifest.pages;
+
+    // Operator: intro -> ops -> admin/tools -> admin/keys -> faq
+    expect(p['intro'].next).toBe('ops');
+    expect(p['ops'].next).toBe('admin/tools');
+    expect(p['admin/keys'].next).toBe('faq');
+
+    // Everyone else: intro -> faq, and nothing points into the gated pages.
+    expect(p['intro'].pprev).toBeUndefined();
+    expect(p['intro'].pnext).toBe('faq');
+    expect(p['faq'].pprev).toBe('intro');
+    expect(p['faq'].pnext).toBeUndefined();
+    expect(p['ops'].pnext).toBeUndefined();
+    expect(p['admin/tools'].pprev).toBeUndefined();
+  });
+
+  it('keeps a gated category link out of the public chain', () => {
+    const categories = new Map([['admin', { label: 'Admin', position: 3, link: 'tools' }]]);
+    const files = new Map(GATED).set('admin/tools', page('title: Tools', 'access: op'));
+    const p = build({ files, categories }).manifest.pages;
+
+    // The category itself is open, so it is walked - but its landing page is not.
+    expect(p['admin/tools'].a).toBe('op');
+    expect(p['intro'].pnext).toBe('faq');
+  });
+
+  it('warns and ignores an access value it does not understand', () => {
+    const files = new Map([['intro', page('title: Introduction', 'access: wizard')]]);
+    const { manifest, report } = build({ files, categories: new Map() });
+
+    expect(manifest.pages['intro'].a).toBeUndefined();
+    expect(manifest.gated).toBeUndefined();
+    expect(report.warnings.some((w) => w.includes('wizard'))).toBe(true);
+  });
+});
