@@ -6,7 +6,7 @@ const esbuild = require("esbuild");
 const json5 = require("json5");
 
 const { ensureSchemaPackage, PACKAGE_NAME } = require("./lib/schemas");
-const { compileCatalog, indexDtsText, globalsDtsText } = require("./lib/dts");
+const { compileCatalog, indexDtsText, globalsDtsText, TYPES_REVISION } = require("./lib/dts");
 
 /** Where the category tag from `defineTemplate`/`defineMany` is stashed. */
 const TEMPLATE_CATEGORY = Symbol.for("@bedrock-core/generator.category");
@@ -334,7 +334,9 @@ async function generateTypes() {
     log,
   });
 
-  const marker = `${version} strict=${settings.strict ? 1 : 0} prefix=${settings.typePrefix || ""}`;
+  // `rev` is what makes an upgrade of the filter itself regenerate types that
+  // were emitted by an older revision, even when the schema version is unchanged.
+  const marker = `${version} strict=${settings.strict ? 1 : 0} prefix=${settings.typePrefix || ""} rev=${TYPES_REVISION}`;
   if (fs.existsSync(markerFile) && fs.readFileSync(markerFile, "utf8") === marker) {
     console.log(`   ✅ types already up to date (${PACKAGE_NAME}@${version})`);
     return;

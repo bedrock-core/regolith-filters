@@ -17,7 +17,7 @@ regolith install github.com/bedrock-core/regolith-filters/generator
     "filterDefinitions": {
       "generator": {
         "url": "github.com/bedrock-core/regolith-filters",
-        "version": "1.1.0"
+        "version": "1.1.1"
       }
     },
     "profiles": {
@@ -173,6 +173,15 @@ unconstrained.
 | Types look stale | Bump `schemaVersion`, or delete `packs/data/generated/mc/`. |
 
 ## Changelog
+
+### 1.1.1
+
+- Inline the generated scalar types. A property that used to read
+  `value?: Value15`, pointing at `export type Value15 = number` further up the
+  file, now reads `value?: number` — and its description moves onto the
+  property, so hover shows it. Named unions (`SurfaceBuilderType`, …) are
+  untouched. The entity types lose ~1700 of these aliases and 8% of their lines.
+- Format the generated `.d.ts` files, so they are readable when you open them.
 
 ### 1.1.0
 
