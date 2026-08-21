@@ -1,6 +1,6 @@
 const { build } = require("esbuild");
 const fs = require("fs");
-const { getTsconfig } = require("get-tsconfig");
+const { parseTsconfig } = require("get-tsconfig");
 const json5 = require("json5");
 const path = require("path");
 
@@ -135,22 +135,19 @@ const MINECRAFT_MODULES = [
 
 /**
  * Load and parse tsconfig.json
+ *
+ * parseTsconfig, not getTsconfig: getTsconfig treats its argument as a place to start SEARCHING
+ * from and always looks for a file literally named tsconfig.json, so a `tsConfigPath` setting
+ * pointing at anything else (tsconfig.test.json, say) was silently ignored and the neighbouring
+ * tsconfig.json loaded instead. parseTsconfig reads the exact file, and resolves `extends` too.
  */
 function loadTsConfig() {
   try {
-    const result = getTsconfig(tsconfigPath);
+    const config = parseTsconfig(tsconfigPath);
 
-    if (!result) {
-      console.error(`❌ Failed to load tsconfig.json at: ${tsconfigPath}`);
-      process.exit(1);
-    }
+    console.log('✅ Loaded tsconfig from', tsconfigPath);
 
-    console.log('✅ Loaded tsconfig.json from', tsconfigPath);
-    if (result.config.extends) {
-      console.log('   Extended from:', result.config.extends);
-    }
-
-    return result.config;
+    return config;
   } catch (error) {
     console.error("❌ Failed to parse tsconfig.json:", error);
     process.exit(1);
@@ -167,9 +164,12 @@ function resolveEntryPoints(tsconfig) {
   // Option 1: Use first file from "files" array if specified
   if (tsconfig.files && tsconfig.files.length > 0) {
     const firstFile = tsconfig.files[0];
-    // Adjust path from project root to temp folder
+    // Adjust path from project root to temp folder. get-tsconfig normalises entries to "./packs/…",
+    // so the leading "./" has to go first or neither packs/ strip matches and this whole branch
+    // falls through to the main.ts/index.ts search below.
     entryPoint = firstFile
       .replace(/\\/g, "/")
+      .replace(/^\.\//, "")
       .replace(/^packs\/BP\//, "BP/")
       .replace(/^packs\//, "");
 
