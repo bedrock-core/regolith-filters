@@ -1,0 +1,10 @@
+{
+	"description": "Selects a manifest variant per profile and resolves its extends chain.",
+	"filters": [
+		{
+			"name": "Resolve Manifest",
+			"runWith": "nodejs",
+			"script": "./main.js"
+		}
+	]
+}

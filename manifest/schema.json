@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema",
+  "$id": "core-manifest",
+  "type": "object",
+  "description": "Regolith filter that selects a manifest variant per profile and resolves its extends chain.",
+  "properties": {
+    "manifestPath": {
+      "description": "Manifest to resolve, relative to the temp workspace ('packs/' prefix is stripped if present). Pass an array to resolve one per pack. The result is always written as manifest.json beside the source, and every other manifest.*.json in BP/ and RP/ is deleted so variants never ship.",
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      ],
+      "default": "BP/manifest.json"
+    }
+  }
+}

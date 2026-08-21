@@ -13,6 +13,9 @@
     "i18n": {
       "url": "github.com/bedrock-core/regolith-filters"
     },
+    "manifest": {
+      "url": "github.com/bedrock-core/regolith-filters"
+    },
     "translation-keys": {
       "url": "github.com/bedrock-core/regolith-filters"
     }

@@ -1,0 +1,9 @@
+{
+  "name": "@bedrock-core/regolith-filters_manifest",
+  "version": "1.0.0",
+  "description": "Regolith filter that selects a manifest variant per profile and resolves its extends chain.",
+  "packageManager": "yarn@4.9.4",
+  "scripts": {
+    "test": "node --test \"test/**/*.test.js\""
+  }
+}
