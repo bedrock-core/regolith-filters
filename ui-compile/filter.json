@@ -1,0 +1,10 @@
+{
+	"description": "Compiles container screens written in JSX into static JSON UI, and sizes the container they open from.",
+	"filters": [
+		{
+			"name": "Compile UI Screens",
+			"runWith": "nodejs",
+			"script": "./main.js"
+		}
+	]
+}
