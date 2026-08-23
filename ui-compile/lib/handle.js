@@ -22,18 +22,19 @@ const key = name => (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name) ? name : quoted(nam
  * @param {string} screen.namespace
  * @param {number} screen.layoutId
  * @param {{ sentinel: number, drawn: number, channels: number, size: number }} screen.allocation
- * @param {{ name: string, slot: number }[]} screen.slots
- * @param {{ name: string, channel: number }[]} screen.channels
+ * @param {{ name: string, slot: number, role: string }[]} screen.slots
+ * @param {{ name: string, slot: number, carrier: string, length: number }[]} screen.channels
  * @param {string | undefined} screen.entity
  * @returns {string} TypeScript source
  */
 export function buildHandle(screen) {
   const slotEntries = screen.slots
-    .map(slot => `  ${key(slot.name)}: ${slot.slot},`)
+    .map(slot => `  ${key(slot.name)}: { slot: ${slot.slot}, role: ${quoted(slot.role)} },`)
     .join('\n');
 
   const channelEntries = screen.channels
-    .map(channel => `  ${key(channel.name)}: ${channel.channel},`)
+    .map(channel => `  ${key(channel.name)}: `
+      + `{ slot: ${channel.slot}, carrier: ${quoted(channel.carrier)}, length: ${channel.length} },`)
     .join('\n');
 
   const slotUnion = screen.slots.length > 0
@@ -56,15 +57,27 @@ export type SlotName = ${slotUnion};
 /** Channel names this screen reads. */
 export type ChannelName = ${channelUnion};
 
-/** Container index of each drawn slot. */
+/**
+ * Where each drawn slot is, and what the player may do with it.
+ *
+ * The role belongs to the SCREEN rather than to the script: a furnace's output
+ * slot is an output slot whatever is attached to it. The runtime enforces it a
+ * tick after the fact, because a container gives no way to veto a move.
+ */
 export const slots = {
 ${slotEntries}
-} as const satisfies Record<SlotName, number>;
+} as const satisfies Record<SlotName, { slot: number; role: 'both' | 'input' | 'output' | 'button' }>;
 
-/** Container index of each bank slot backing a channel. */
+/**
+ * Where each channel lives and how wide it is.
+ *
+ * A \`text\` channel spans one slot per character: the code rides that slot's
+ * stack size, which is the only value writable in place, and the layout
+ * localizes it back into a glyph.
+ */
 export const channels = {
 ${channelEntries}
-} as const satisfies Record<ChannelName, number>;
+} as const satisfies Record<ChannelName, { slot: number; carrier: 'ratio' | 'text'; length: number }>;
 
 export const screen = {
   /** JSON UI namespace the layout was emitted into. */

@@ -22,13 +22,13 @@ const stub = path.join(import.meta.dirname, 'stubs', 'minecraft.cjs');
  * @param {string} namespace  JSON UI namespace for this screen
  * @param {string} collection collection every slot and channel reads
  */
-const entrySource = (screenPath, namespace, collection) => `
+const entrySource = (screenPath, namespace, collection, keyPrefix) => `
 // Namespace import, not a named one: \`entity\` is optional, and esbuild fails
 // the build outright on a named import a module does not export.
 import * as screenModule from ${JSON.stringify(screenPath)};
 
 const Screen = screenModule.default;
-import { computeLayout, expandStatic } from '@bedrock-core/ui-runtime/compile';
+import { charsetLang, computeLayout, expandStatic } from '@bedrock-core/ui-runtime/compile';
 import { emit, toIr } from '@bedrock-core/ui-compile';
 
 if (typeof Screen !== 'function') {
@@ -40,7 +40,14 @@ const ir = toIr(computeLayout(expandStatic(Screen({}))), {
   collection: ${JSON.stringify(collection)},
 });
 
-export default { ir, document: emit(ir), entity: screenModule.entity };
+// The character table comes from the PROJECT'S runtime, not the filter's, so
+// the codes a screen is compiled against are the codes its runtime writes.
+export default {
+  ir,
+  document: emit(ir),
+  entity: screenModule.entity,
+  lang: charsetLang(${JSON.stringify(keyPrefix)}),
+};
 `;
 
 /**
@@ -50,12 +57,15 @@ export default { ir, document: emit(ir), entity: screenModule.entity };
  * @param {string} options.collection collection every slot and channel reads
  * @param {string} options.cacheDir   where transpiled intermediates land
  * @param {string} options.jsxImportSource jsxImportSource for the screen's JSX
+ * @param {string} options.keyPrefix    key the character table is generated under
  * @returns {Promise<{ ir: object, document: object, entity?: string }>}
  */
-export async function compileScreen({ screenPath, namespace, collection, cacheDir, jsxImportSource }) {
+export async function compileScreen({
+  screenPath, namespace, collection, cacheDir, jsxImportSource, keyPrefix,
+}) {
   const result = await build({
     stdin: {
-      contents: entrySource(screenPath, namespace, collection),
+      contents: entrySource(screenPath, namespace, collection, keyPrefix),
       resolveDir: path.dirname(screenPath),
       sourcefile: `${path.basename(screenPath)}.entry.tsx`,
       loader: 'tsx',

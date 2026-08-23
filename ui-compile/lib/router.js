@@ -58,6 +58,7 @@ export function buildRouter({ screens, collection, protocolAux }) {
     document[`bcui_gate_${screen.name}`] = {
       type: 'panel',
       size: ['100%', '100%'],
+      layer: 5,
       controls: [{ [`layout@${screen.namespace}.${screen.entry}`]: {} }],
       bindings: [
         ...sentinelBindings(collection),
@@ -72,13 +73,18 @@ export function buildRouter({ screens, collection, protocolAux }) {
     document[`bcui_host_${screen.name}`] = host(`gate@chest.bcui_gate_${screen.name}`, collection);
   }
 
-  // True only when no compiled layout claimed the screen, i.e. an ordinary chest.
+  // True only when no compiled layout claimed the screen, i.e. an ordinary
+  // chest. Vanilla's own visual content is re-emitted here, behind the inverted
+  // gate, because the replacement below takes the whole screen.
   document['bcui_vanilla_gate'] = {
     type: 'panel',
     size: ['100%', '100%'],
+    layer: 5,
     controls: [
-      { 'chest_label@chest.chest_label': {} },
-      { 'small_chest_grid@chest.small_chest_grid': { offset: [7, 9] } },
+      { 'common_panel@common.common_panel': {} },
+      { 'small_chest_panel_top_half@chest.small_chest_panel_top_half': {} },
+      { 'inventory_panel_bottom_half_with_label@common.inventory_panel_bottom_half_with_label': {} },
+      { 'hotbar_grid@common.hotbar_grid_template': {} },
     ],
     bindings: [
       ...sentinelBindings(collection),
@@ -92,18 +98,36 @@ export function buildRouter({ screens, collection, protocolAux }) {
 
   document['bcui_vanilla_host'] = host('gate@chest.bcui_vanilla_gate', collection);
 
+  // The WHOLE screen, not the strip above the player's inventory.
+  //
+  // A compiled screen decides everything that is drawn, so the background, the
+  // player's inventory and the hotbar are no longer free -- a screen asks for
+  // them by name or does without. What is NOT optional is the functional
+  // chrome: without `flying_item_renderer` a dragged item is invisible, without
+  // the take-progress button touch controls cannot take, and without the
+  // gamepad cursor a controller cannot move. Those are emitted for both paths.
+  //
   // Wholesale replacement rather than a modification: a replacement is a normal
-  // control tree, so cross-namespace @-bases resolve inside it. Vanilla's own
-  // children are re-emitted above, behind the inverted gate.
-  document['small_chest_panel_top_half'] = {
+  // control tree, so cross-namespace @-bases resolve inside it.
+  document['small_chest_panel'] = {
     type: 'panel',
-    size: ['100%', '50%'],
-    offset: [0, 12],
-    anchor_to: 'top_left',
-    anchor_from: 'top_left',
     controls: [
-      { 'vanilla@chest.bcui_vanilla_host': {} },
-      ...screens.map(screen => ({ [`${screen.name}@chest.bcui_host_${screen.name}`]: {} })),
+      { 'container_gamepad_helpers@common.container_gamepad_helpers': {} },
+      { 'selected_item_details_factory@common.selected_item_details_factory': {} },
+      { 'item_lock_notification_factory@common.item_lock_notification_factory': {} },
+      {
+        'root_panel@common.root_panel': {
+          layer: 1,
+          controls: [
+            { 'vanilla@chest.bcui_vanilla_host': {} },
+            ...screens.map(screen => ({ [`${screen.name}@chest.bcui_host_${screen.name}`]: {} })),
+            { 'inventory_take_progress_icon_button@common.inventory_take_progress_icon_button': {} },
+            { 'flying_item_renderer@common.flying_item_renderer': { layer: 15 } },
+            { 'inventory_selected_icon_button@common.inventory_selected_icon_button': {} },
+            { 'gamepad_cursor@common.gamepad_cursor_button': {} },
+          ],
+        },
+      },
     ],
   };
 
