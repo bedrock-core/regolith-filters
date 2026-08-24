@@ -58,6 +58,10 @@ const defaults = {
   // Netherite pickaxe: damageable, so its durability can carry the layout key,
   // and 2031 layouts fit before a second marker item is needed.
   protocolItemAux: 40763392,
+  // Durability reading that marks a button's transport item, so the redrawn
+  // inventory and hotbar grids draw it as nothing while the script pulls it
+  // back. Must match the runtime's `TRANSPORT_ORDINAL`.
+  transportOrdinal: 2001,
 };
 
 const settings = { ...defaults, ...JSON.parse(process.argv[2] ?? '{}') };
@@ -101,6 +105,73 @@ if (screenPaths.length === 0) {
 // Compile
 // ---------------------------------------------------------------------------
 
+/**
+ * Reads a pack JSON file that may carry comments.
+ *
+ * Vanilla tolerates JSONC in pack files and authors use it, so `JSON.parse`
+ * alone is not enough to READ one. Comments do not survive the round trip, but
+ * only the workspace copy is ever written back -- the author's own file is left
+ * exactly as they wrote it.
+ */
+const readJsonc = (file) => {
+  const raw = fs.readFileSync(file, 'utf-8');
+  let out = '';
+  let inString = false;
+  let escaped = false;
+
+  for (let at = 0; at < raw.length; at += 1) {
+    const char = raw[at];
+    const next = raw[at + 1];
+
+    if (inString) {
+      out += char;
+
+      if (escaped) {
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      out += char;
+
+      continue;
+    }
+
+    if (char === '/' && next === '/') {
+      while (at < raw.length && raw[at] !== '\n') {
+        at += 1;
+      }
+
+      out += '\n';
+
+      continue;
+    }
+
+    if (char === '/' && next === '*') {
+      at += 2;
+
+      while (at < raw.length && !(raw[at] === '*' && raw[at + 1] === '/')) {
+        at += 1;
+      }
+
+      at += 1;
+
+      continue;
+    }
+
+    out += char;
+  }
+
+  return JSON.parse(out);
+};
+
 const rel = file => path.relative(projectRoot, file).replaceAll('\\', '/');
 
 /** Collects the IR nodes of one kind, in document order. */
@@ -125,7 +196,6 @@ const collect = (node, kind, into = []) => {
 const collectChannels = (node, into = []) => {
   if (typeof node.channel === 'number') {
     into.push({
-      name: node.name,
       slot: node.channel,
       carrier: node.kind === 'text' ? 'text' : 'ratio',
       length: node.kind === 'text' ? node.length : 1,
@@ -192,11 +262,20 @@ for (const [index, screenPath] of screenPaths.entries()) {
     allocation: result.ir.allocation,
     entity: result.entity,
     lang: result.lang,
-    slots: collect(result.ir.root, 'slot')
-      .map(node => ({ name: node.name, slot: node.slot, role: node.role })),
+    slots: collect(result.ir.root, 'slot').map(node => ({ slot: node.slot, role: node.role })),
+    source: `./${name}.screen`,
     // Collected by what they carry, not by what they are.
     channels: collectChannels(result.ir.root),
   };
+
+  // The component itself has to reach the behaviour pack: the runtime
+  // re-renders it per player to produce the live values, and RP/ui is not
+  // bundled into scripts. Copying rather than importing across packs keeps the
+  // handle and the component in the same place, so one import gets both.
+  const screenSource = fs.readFileSync(screenPath, 'utf-8');
+  const componentFile = `${name}.screen.tsx`;
+
+  fs.writeFileSync(path.join(handleDir, componentFile), screenSource, 'utf-8');
 
   const source = buildHandle(screen);
 
@@ -208,11 +287,13 @@ for (const [index, screenPath] of screenPaths.entries()) {
   // resolves a tsconfig alias into it, and committing it is what lets the editor
   // and `tsc` see the handle without a build having run. Changed-only, so the
   // file watcher stays quiet — the same shape the i18n filter uses.
-  const committed = path.join(projectRoot, 'packs', settings.handleDir, `${name}.ts`);
+  for (const [file, contents] of [[`${name}.ts`, source], [componentFile, screenSource]]) {
+    const committed = path.join(projectRoot, 'packs', settings.handleDir, file);
 
-  if (!fs.existsSync(committed) || fs.readFileSync(committed, 'utf-8') !== source) {
-    fs.mkdirSync(path.dirname(committed), { recursive: true });
-    fs.writeFileSync(committed, source, 'utf-8');
+    if (!fs.existsSync(committed) || fs.readFileSync(committed, 'utf-8') !== contents) {
+      fs.mkdirSync(path.dirname(committed), { recursive: true });
+      fs.writeFileSync(committed, contents, 'utf-8');
+    }
   }
 
   compiled.push(screen);
@@ -294,6 +375,7 @@ fs.writeFileSync(
       screens: compiled,
       collection: settings.collection,
       protocolAux: settings.protocolItemAux,
+      transportOrdinal: settings.transportOrdinal,
     }),
     null,
     '\t',
@@ -369,7 +451,7 @@ for (const screen of compiled) {
   const match = files
     .map(file => path.join(entityDir, file))
     .find((file) => {
-      const parsed = JSON.parse(fs.readFileSync(file, 'utf-8'));
+      const parsed = readJsonc(file);
 
       return parsed['minecraft:entity']?.description?.identifier === screen.entity;
     });
@@ -379,7 +461,7 @@ for (const screen of compiled) {
     process.exit(1);
   }
 
-  const definition = JSON.parse(fs.readFileSync(match, 'utf-8'));
+  const definition = readJsonc(match);
   const components = definition['minecraft:entity'].components ??= {};
   const inventory = components['minecraft:inventory'] ??= {};
 

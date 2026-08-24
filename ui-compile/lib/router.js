@@ -44,15 +44,159 @@ const sentinelBindings = (collection) => [
 ];
 
 /**
+ * The player's inventory and hotbar, redrawn so a transport item is invisible.
+ *
+ * A button press auto-places its transport into the player's inventory, and
+ * vanilla's grids would draw it there for the tick it takes the script to pull
+ * it back. These are clones of vanilla's own grid trees with ONE swap: the item
+ * renderer is wrapped in a panel that reads the slot's id and durability and
+ * hides itself when both match the transport — the same two-literal check the
+ * router itself runs on the sentinel. The durability bar rides inside the same
+ * wrapper (vanilla's own is turned off), so a damaged transport does not leave
+ * a stray bar floating over an apparently empty cell.
+ *
+ * Cloned rather than modified: vanilla's `container_item` hardcodes its bar and
+ * takes only the renderer as a variable, so the wrapper is the one seam wide
+ * enough to carry both.
+ *
+ * @param {number} protocolAux
+ * @param {number} transportOrdinal
+ * @returns {Record<string, unknown>} definitions for the `chest` namespace
+ */
+const hiddenItemGrids = (protocolAux, transportOrdinal) => ({
+  // The seam: vanilla's item renderer plus its durability bar, gated together.
+  // `$item_collection_name` flows down from the grid item exactly as it does
+  // into vanilla's own bar — a variable is legal there, since this whole tree
+  // is a normal replacement, not a `modifications` insert.
+  bcui_gated_item: {
+    type: 'panel',
+    size: ['100%', '100%'],
+    controls: [
+      { 'renderer@common.item_renderer': { size: ['100%', '100%'] } },
+      {
+        'durability@common.durability_bar': {
+          $durability_bar_required: true,
+          offset: [0, 5],
+          layer: 20,
+        },
+      },
+    ],
+    bindings: [
+      { binding_type: 'collection_details', binding_collection_name: '$item_collection_name' },
+      {
+        binding_name: '#item_id_aux',
+        binding_name_override: '#aux',
+        binding_type: 'collection',
+        binding_collection_name: '$item_collection_name',
+      },
+      {
+        binding_name: '#item_durability_current_amount',
+        binding_name_override: '#dur',
+        binding_type: 'collection',
+        binding_collection_name: '$item_collection_name',
+      },
+      {
+        binding_type: 'view',
+        source_property_name: `(not ((#aux = ${protocolAux}) and (#dur = ${transportOrdinal})))`,
+        target_property_name: '#visible',
+      },
+    ],
+  },
+
+  'bcui_inventory_item@common.container_item': {
+    $item_collection_name: 'inventory_items',
+    $item_renderer: 'chest.bcui_gated_item',
+    // Off so the only bar is the gated one inside the wrapper above.
+    $durability_bar_required: false,
+  },
+
+  'bcui_hotbar_item@common.container_item': {
+    $item_collection_name: 'hotbar_items',
+    $item_renderer: 'chest.bcui_gated_item',
+    $durability_bar_required: false,
+  },
+
+  // Vanilla's `common.inventory_panel`, cell swapped.
+  bcui_inventory_panel: {
+    type: 'panel',
+    size: [88, 83],
+    anchor_from: 'bottom_middle',
+    anchor_to: 'bottom_middle',
+    controls: [
+      {
+        inventory_grid: {
+          type: 'grid',
+          size: [162, 54],
+          anchor_from: 'bottom_middle',
+          anchor_to: 'bottom_middle',
+          offset: [0, -26],
+          grid_dimensions: [9, 3],
+          grid_item_template: 'chest.bcui_inventory_item',
+          collection_name: 'inventory_items',
+        },
+      },
+    ],
+  },
+
+  // Vanilla's `common.inventory_panel_bottom_half_with_label`, flattened onto
+  // the clone above.
+  bcui_inventory_panel_with_label: {
+    type: 'panel',
+    size: ['100%', 93],
+    anchor_from: 'bottom_left',
+    anchor_to: 'bottom_left',
+    controls: [
+      { 'inventory_panel@chest.bcui_inventory_panel': {} },
+      {
+        'inventory_label@common.section_heading_label': {
+          anchor_from: 'top_left',
+          anchor_to: 'top_left',
+          offset: [7, 3],
+          layer: 2,
+          text: 'container.inventory',
+        },
+      },
+    ],
+  },
+
+  // Vanilla's `common.hotbar_grid_template`, cell swapped.
+  bcui_hotbar_grid: {
+    type: 'grid',
+    size: [162, 18],
+    anchor_from: 'bottom_middle',
+    anchor_to: 'bottom_middle',
+    offset: [0, -5],
+    grid_dimensions: [9, 1],
+    grid_item_template: 'chest.bcui_hotbar_item',
+    collection_name: 'hotbar_items',
+  },
+});
+
+/**
  * @param {object} options
  * @param {{ name: string, namespace: string, entry: string, layoutId: number }[]} options.screens
  * @param {string} options.collection
  * @param {number} options.protocolAux aux id of the marker item in slot 0
+ * @param {number} options.transportOrdinal durability reading that hides a
+ *   transport item in the redrawn grids; must match the runtime's
+ *   `TRANSPORT_ORDINAL`
  * @returns {object} a JSON UI document in the `chest` namespace
  */
-export function buildRouter({ screens, collection, protocolAux }) {
+export function buildRouter({ screens, collection, protocolAux, transportOrdinal }) {
+  for (const screen of screens) {
+    // The two keys share the durability channel, so they must never collide: a
+    // layout with the transport's reading would make the grids hide the wrong
+    // item, and 2001 screens is far past the marker item's range anyway.
+    if (screen.layoutId >= transportOrdinal) {
+      throw new Error(
+        `Layout id ${screen.layoutId} (${screen.name}) reached the transport ordinal `
+        + `${transportOrdinal}; the two ride the same durability value and must not meet.`,
+      );
+    }
+  }
+
   /** @type {Record<string, unknown>} */
-  const document = { namespace: 'chest' };
+  const document = { namespace: 'chest', ...hiddenItemGrids(protocolAux, transportOrdinal) };
 
   for (const screen of screens) {
     document[`bcui_gate_${screen.name}`] = {
@@ -85,6 +229,9 @@ export function buildRouter({ screens, collection, protocolAux }) {
       { 'small_chest_panel_top_half@chest.small_chest_panel_top_half': {} },
       { 'inventory_panel_bottom_half_with_label@common.inventory_panel_bottom_half_with_label': {} },
       { 'hotbar_grid@common.hotbar_grid_template': {} },
+      // Vanilla keeps its fly animation; compiled screens do without — see the
+      // root panel below.
+      { 'flying_item_renderer@common.flying_item_renderer': { layer: 15 } },
     ],
     bindings: [
       ...sentinelBindings(collection),
@@ -122,7 +269,11 @@ export function buildRouter({ screens, collection, protocolAux }) {
             { 'vanilla@chest.bcui_vanilla_host': {} },
             ...screens.map(screen => ({ [`${screen.name}@chest.bcui_host_${screen.name}`]: {} })),
             { 'inventory_take_progress_icon_button@common.inventory_take_progress_icon_button': {} },
-            { 'flying_item_renderer@common.flying_item_renderer': { layer: 15 } },
+            // No flyer here: it moved into the vanilla gate. The renderer draws
+            // whatever flies with no way to filter by item, and on a compiled
+            // screen the most frequent flier is a button's transport on its way
+            // to the hidden grids. The cost is real items from input and output
+            // slots arriving without the animation.
             { 'inventory_selected_icon_button@common.inventory_selected_icon_button': {} },
             { 'gamepad_cursor@common.gamepad_cursor_button': {} },
           ],

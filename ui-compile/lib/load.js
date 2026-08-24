@@ -35,7 +35,9 @@ if (typeof Screen !== 'function') {
   throw new Error('a screen module must default-export a component');
 }
 
-const ir = toIr(computeLayout(expandStatic(Screen({}))), {
+// The COMPONENT, not the result of calling it: hooks resolve against the
+// dispatcher expandStatic installs, so calling it first runs them with none.
+const ir = toIr(computeLayout(expandStatic({ type: Screen, props: {} })), {
   namespace: ${JSON.stringify(namespace)},
   collection: ${JSON.stringify(collection)},
 });
