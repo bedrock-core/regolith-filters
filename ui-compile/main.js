@@ -1,31 +1,31 @@
 // @bedrock-core/regolith-filters — ui-compile
 //
-// Container screens are written as JSX under RP/ui and compiled here into static
-// JSON UI. Unlike a server form, a container screen cannot be serialized at
-// runtime: the chest screen offers no string channel wide enough to carry a
+// Container screens are written as JSX under BP/scripts and compiled here into
+// static JSON UI. Unlike a server form, a container screen cannot be serialized
+// at runtime: the chest screen offers no string channel wide enough to carry a
 // layout, so the layout is baked and only state travels at runtime.
 //
-// For each `RP/ui/**/*.screen.tsx` this filter:
+// For each `BP/scripts/**/*.screen.tsx` this filter:
 //   1. bundles the screen together with the compiler, using the PROJECT'S copy
 //      of @bedrock-core/ui-runtime and @bedrock-core/ui-compile, so a screen is
 //      always compiled against the library the addon actually ships,
-//   2. expands components, solves flexbox, allocates slot indices, emits JSON UI,
-//   3. writes RP/ui/compiled/<name>.json,
-//   4. writes data/ui/<name>.ts — the typed handle the script uses to address
-//      slots by name instead of restating indices,
-//   5. sizes `minecraft:inventory` on the entity the screen names,
-//   6. removes the source from the pack, because .tsx is not a pack asset.
+//   2. writes the emitted JSON UI to RP/ui/core-ui/screens/<name>.json,
+//   3. stamps the entity the screen names: `minecraft:inventory` sized to the
+//      layout, and the entity property the runtime reads the layout key from.
 //
 // One router covers every screen: a cheap protocol check decides whether a chest
 // is ours at all, and a layout key decides which. A vanilla chest fails the
 // first check and renders untouched.
+//
+// Everything is written into the Regolith workspace. A screen is an ordinary
+// script module the addon imports itself — the bundler inlines it and strips
+// the sources afterwards — so nothing is copied, generated into the project or
+// deleted here.
 
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { buildHandle } from './lib/handle.js';
-import { compileScreen } from './lib/load.js';
-import { buildRouter } from './lib/router.js';
+import { loadScreen } from './lib/load.js';
 import { registerUiDefs } from './lib/uiDefs.js';
 
 const projectRoot = process.env['ROOT_DIR'];
@@ -40,31 +40,21 @@ if (!projectRoot) {
 // Settings
 // ---------------------------------------------------------------------------
 
-const defaults = {
-  namespace: 'bcui',
-  sourceDir: 'RP/ui',
-  outputDir: 'RP/ui/compiled',
-  // Must be vanilla's own path. JSON UI resolves a definition from the file that
-  // owns it, so `chest.small_chest_panel_top_half` declared in any other file —
-  // same namespace or not — is simply ignored, and the vanilla chest renders.
-  routerFile: 'RP/ui/chest_screen.json',
-  handleDir: 'data/ui',
-  entityDir: 'BP/entities',
-  textsDir: 'RP/texts',
-  // Where the generated character table lives. Must match the compiler's.
-  keyPrefix: 'bcui.c.',
-  collection: 'container_items',
-  jsxImportSource: '@bedrock-core/ui',
-  // Netherite pickaxe: damageable, so its durability can carry the layout key,
-  // and 2031 layouts fit before a second marker item is needed.
-  protocolItemAux: 40763392,
-  // Durability reading that marks a button's transport item, so the redrawn
-  // inventory and hotbar grids draw it as nothing while the script pulls it
-  // back. Must match the runtime's `TRANSPORT_ORDINAL`.
-  transportOrdinal: 2001,
-};
+// Fixed addon paths: what Minecraft needs for scripts, entities, UI and texts.
+// They are not options — the pack does not work anywhere else — so they are
+// constants, not settings. The router in particular MUST be vanilla's own
+// path: JSON UI resolves a definition from the file that owns it, so
+// `chest.small_chest_panel` declared in any other file is simply ignored, and
+// the vanilla chest renders.
+const SOURCE_DIR = 'BP/scripts';
+const OUTPUT_DIR = 'RP/ui/core-ui/screens';
+const ROUTER_FILE = 'RP/ui/chest_screen.json';
+const ENTITY_DIR = 'BP/entities';
+const TEXTS_DIR = 'RP/texts';
+const JSX_IMPORT_SOURCE = '@bedrock-core/ui';
 
-const settings = { ...defaults, ...JSON.parse(process.argv[2] ?? '{}') };
+// The one setting: the addon's namespace. Everything else is fixed above.
+const settings = JSON.parse(process.argv[2] ?? '{}');
 
 const cacheDir = path.join(projectRoot, '.regolith', 'cache', 'ui-compile');
 
@@ -75,8 +65,14 @@ const cacheDir = path.join(projectRoot, '.regolith', 'cache', 'ui-compile');
 /** Screens are marked by extension, so ordinary .tsx helpers can sit beside them. */
 const SCREEN_SUFFIX = '.screen.tsx';
 
-/** @param {string} dir @returns {string[]} */
-function findScreens(dir) {
+/**
+ * Every file under `dir` whose name ends in `suffix`, recursively.
+ *
+ * @param {string} dir
+ * @param {string} suffix
+ * @returns {string[]}
+ */
+function findFiles(dir, suffix) {
   if (!fs.existsSync(dir)) {
     return [];
   }
@@ -85,21 +81,86 @@ function findScreens(dir) {
     const full = path.join(dir, entry.name);
 
     if (entry.isDirectory()) {
-      return findScreens(full);
+      return findFiles(full, suffix);
     }
 
-    return entry.name.endsWith(SCREEN_SUFFIX) ? [full] : [];
+    return entry.name.endsWith(suffix) ? [full] : [];
   });
 }
 
-// Sorted so layout keys are stable across builds: an unstable key would leave
-// every already-placed entity in a world pointing at the wrong screen.
-const screenPaths = findScreens(path.resolve(settings.sourceDir)).sort();
+// Sorted so layout keys are stable across builds: an entity keeps the key it
+// was stamped with, so a key that moved would leave every already-placed entity
+// in a world pointing at the wrong screen.
+const screenPaths = findFiles(path.resolve(SOURCE_DIR), SCREEN_SUFFIX).sort();
 
 if (screenPaths.length === 0) {
-  console.log(`ℹ️  ui-compile: no *${SCREEN_SUFFIX} under ${settings.sourceDir}, nothing to do`);
+  console.log(`ℹ️  ui-compile: no *${SCREEN_SUFFIX} under ${SOURCE_DIR}, nothing to do`);
   process.exit(0);
 }
+
+const rel = file => path.relative(projectRoot, file).replaceAll('\\', '/');
+
+// The name is the JSON UI namespace and the output file, so it has to be unique
+// across the addon whatever directory a screen sits in.
+const names = screenPaths.map(screenPath => path.basename(screenPath, SCREEN_SUFFIX));
+const duplicate = names.find((name, index) => names.indexOf(name) !== index);
+
+if (duplicate !== undefined) {
+  console.error(`❌ ui-compile: two screens are named "${duplicate}"; a screen's file name has to be unique`);
+  process.exit(1);
+}
+
+// ---------------------------------------------------------------------------
+// Namespace
+// ---------------------------------------------------------------------------
+
+// The addon's namespace prefixes every screen's JSON UI namespace, so a screen
+// is `<namespace>_<name>` — the addon's own name, not the library's. Taken from
+// the `namespace` setting, or scanned from the `core.register({ creator, pack })`
+// the server package writes, the way the other filters resolve it.
+const CREATOR_RE = /\bcreator\s*:\s*(['"`])([a-z0-9_]+)\1/g;
+const PACK_RE = /\bpack\s*:\s*(['"`])([a-z0-9_]+)\1/g;
+
+const scanNamespace = (dir) => {
+  const creators = new Set();
+  const packs = new Set();
+
+  for (const file of [...findFiles(dir, '.ts'), ...findFiles(dir, '.tsx'), ...findFiles(dir, '.js')]) {
+    const text = fs.readFileSync(file, 'utf-8');
+
+    if (!text.includes('.register(')) {
+      continue;
+    }
+
+    for (const m of text.matchAll(CREATOR_RE)) creators.add(m[2]);
+    for (const m of text.matchAll(PACK_RE)) packs.add(m[2]);
+  }
+
+  return creators.size === 1 && packs.size === 1
+    ? `${[...creators][0]}_${[...packs][0]}`
+    : undefined;
+};
+
+let namespace = settings.namespace;
+
+if (namespace) {
+  if (!/^[a-z0-9_]+$/.test(namespace)) {
+    console.error(`❌ ui-compile: namespace "${namespace}" must be lowercase a-z, 0-9 and _`);
+    process.exit(1);
+  }
+} else {
+  namespace = scanNamespace(path.resolve(SOURCE_DIR));
+
+  if (namespace === undefined) {
+    console.error(
+      '❌ ui-compile: no namespace — set the "namespace" setting, '
+      + 'or write creator/pack as string literals in core.register()',
+    );
+    process.exit(1);
+  }
+}
+
+console.log(`🏷️  ui-compile: namespace "${namespace}"`);
 
 // ---------------------------------------------------------------------------
 // Compile
@@ -172,74 +233,52 @@ const readJsonc = (file) => {
   return JSON.parse(out);
 };
 
-const rel = file => path.relative(projectRoot, file).replaceAll('\\', '/');
-
-/** Collects the IR nodes of one kind, in document order. */
-const collect = (node, kind, into = []) => {
-  if (node.kind === kind) {
-    into.push(node);
-  }
-
-  for (const child of node.children ?? []) {
-    collect(child, kind, into);
-  }
-
-  return into;
-};
-
 /**
- * Every node holding a bank slot, in document order.
+ * Relays a failure the way the compiler worded it, and stops the build.
  *
- * A text run is one channel by name but many slots underneath — one per
- * character — so its width travels with it.
+ * The compiler's own errors already say what to do — an unsupported control
+ * lists what is supported, an oversized screen gives the canvas. Relaying the
+ * message unchanged beats wrapping it.
  */
-const collectChannels = (node, into = []) => {
-  if (typeof node.channel === 'number') {
-    into.push({
-      slot: node.channel,
-      carrier: node.kind === 'text' ? 'text' : 'ratio',
-      length: node.kind === 'text' ? node.length : 1,
-    });
-  }
-
-  for (const child of node.children ?? []) {
-    collectChannels(child, into);
-  }
-
-  return into;
+const fail = (context, error) => {
+  console.error(`❌ ui-compile: ${context}`);
+  console.error(String(error instanceof Error ? error.message : error));
+  process.exit(1);
 };
 
-const outputDir = path.resolve(settings.outputDir);
-const handleDir = path.resolve(settings.handleDir);
+const outputDir = path.resolve(OUTPUT_DIR);
 
 fs.mkdirSync(outputDir, { recursive: true });
-fs.mkdirSync(handleDir, { recursive: true });
 
+/** @type {import('./lib/load.js').CompiledScreen[]} */
 const compiled = [];
 
+// Every bundle carries the project's own library, and its exports are the same
+// from one screen to the next; the last one loaded speaks for all of them.
+/** @type {import('./lib/load.js').ScreenBundle} */
+let library;
+
 for (const [index, screenPath] of screenPaths.entries()) {
-  const name = path.basename(screenPath, SCREEN_SUFFIX);
-  const namespace = `${settings.namespace}_${name}`;
+  const name = names[index];
   const layoutId = index + 1;
 
-  let result;
-
   try {
-    result = await compileScreen({
+    library = await loadScreen({
       screenPath,
+      name,
       namespace,
-      collection: settings.collection,
+      layoutId,
       cacheDir,
-      jsxImportSource: settings.jsxImportSource,
-      keyPrefix: settings.keyPrefix,
+      jsxImportSource: JSX_IMPORT_SOURCE,
     });
   } catch (error) {
-    // The compiler's own errors already say what to do — a rejected hook names
-    // its replacement, an unsupported control lists what is supported. Relaying
-    // the message unchanged beats wrapping it.
-    console.error(`❌ ui-compile: ${rel(screenPath)}`);
-    console.error(String(error instanceof Error ? error.message : error));
-    process.exit(1);
+    fail(rel(screenPath), error);
+  }
+
+  const screen = library.compiled;
+
+  if (screen.layoutId > library.maxLayout) {
+    fail(rel(screenPath), `layout key ${screen.layoutId} is past ${library.maxLayout}, the highest the runtime can address`);
   }
 
   const header = [
@@ -250,51 +289,9 @@ for (const [index, screenPath] of screenPaths.entries()) {
 
   fs.writeFileSync(
     path.join(outputDir, `${name}.json`),
-    `${header}${JSON.stringify(result.document, null, '\t')}\n`,
+    `${header}${JSON.stringify(screen.document, null, '\t')}\n`,
     'utf-8',
   );
-
-  const screen = {
-    name,
-    namespace,
-    layoutId,
-    entry: result.ir.entry,
-    allocation: result.ir.allocation,
-    entity: result.entity,
-    lang: result.lang,
-    slots: collect(result.ir.root, 'slot').map(node => ({ slot: node.slot, role: node.role })),
-    source: `./${name}.screen`,
-    // Collected by what they carry, not by what they are.
-    channels: collectChannels(result.ir.root),
-  };
-
-  // The component itself has to reach the behaviour pack: the runtime
-  // re-renders it per player to produce the live values, and RP/ui is not
-  // bundled into scripts. Copying rather than importing across packs keeps the
-  // handle and the component in the same place, so one import gets both.
-  const screenSource = fs.readFileSync(screenPath, 'utf-8');
-  const componentFile = `${name}.screen.tsx`;
-
-  fs.writeFileSync(path.join(handleDir, componentFile), screenSource, 'utf-8');
-
-  const source = buildHandle(screen);
-
-  fs.writeFileSync(path.join(handleDir, `${name}.ts`), source, 'utf-8');
-
-  // Also committed to the project — but under packs/data, never into RP or BP.
-  // A filter takes the user's source and produces a build; it does not edit the
-  // pack folders. data/ is the agreed place for generated modules, the bundler
-  // resolves a tsconfig alias into it, and committing it is what lets the editor
-  // and `tsc` see the handle without a build having run. Changed-only, so the
-  // file watcher stays quiet — the same shape the i18n filter uses.
-  for (const [file, contents] of [[`${name}.ts`, source], [componentFile, screenSource]]) {
-    const committed = path.join(projectRoot, 'packs', settings.handleDir, file);
-
-    if (!fs.existsSync(committed) || fs.readFileSync(committed, 'utf-8') !== contents) {
-      fs.mkdirSync(path.dirname(committed), { recursive: true });
-      fs.writeFileSync(committed, contents, 'utf-8');
-    }
-  }
 
   compiled.push(screen);
 
@@ -310,27 +307,25 @@ for (const [index, screenPath] of screenPaths.entries()) {
 // ---------------------------------------------------------------------------
 
 // A container slot publishes no text, so a string reaches a screen one
-// character at a time: each cell reads its slot's stack size and localizes
-// `bcui.c.<code>`. This is the table that turns those codes back into glyphs.
+// character at a time: each cell reads its slot's stack size and localizes a
+// key built from it. This is the table that turns those codes back into glyphs.
 //
-// It is generated rather than written because it is the contract between the
-// compiler and the runtime — they encode against the same list or nothing
-// renders — and it lands in the WORKSPACE, never in the user's own texts/.
-if (compiled.some(screen => screen.channels.some(channel => channel.carrier === 'text'))) {
-  const textsDir = path.resolve(settings.textsDir);
-  const lines = compiled.find(screen => screen.lang)?.lang ?? [];
+// It comes from the project's runtime rather than from here because it is the
+// contract between the compiler and the runtime — they encode against the same
+// list or nothing renders — and it lands in the WORKSPACE, never in the user's
+// own texts/.
+if (compiled.some(screen => screen.hasText)) {
+  const textsDir = path.resolve(TEXTS_DIR);
+  const lines = library.lang;
 
   fs.mkdirSync(textsDir, { recursive: true });
 
-  for (const file of fs.existsSync(textsDir)
-    ? fs.readdirSync(textsDir).filter(name => name.endsWith('.lang'))
-    : []) {
+  for (const file of fs.readdirSync(textsDir).filter(name => name.endsWith('.lang'))) {
     const target = path.join(textsDir, file);
     const existing = fs.readFileSync(target, 'utf-8');
 
-    // Guarded on the first line the table actually produces, not on a code
-    // that may not have one: the blank has no entry, so keying the check on it
-    // would append the whole table again on every build.
+    // Guarded on the first line the table actually produces, so a rebuild over
+    // a workspace that already carries it does not append it again.
     if (lines[0] !== undefined && existing.includes(lines[0])) {
       continue;
     }
@@ -340,9 +335,9 @@ if (compiled.some(screen => screen.channels.some(channel => channel.carrier === 
       [
         existing.replace(/\s*$/, ''),
         '',
-        '## Generated by the ui-compile filter -- the character table a text',
-        '## channel is decoded through. One slot carries one code; the label',
-        '## localizes this key and the value below is what gets drawn.',
+        '## Generated by the ui-compile filter -- the character table live text',
+        '## is decoded through. One slot carries one code; the label localizes',
+        '## this key and the value below is what gets drawn.',
         ...lines,
         '',
       ].join('\n'),
@@ -357,7 +352,15 @@ if (compiled.some(screen => screen.channels.some(channel => channel.carrier === 
 // Router
 // ---------------------------------------------------------------------------
 
-const routerFile = path.resolve(settings.routerFile);
+const routerFile = path.resolve(ROUTER_FILE);
+
+let router;
+
+try {
+  router = library.buildRouter(compiled);
+} catch (error) {
+  fail(rel(routerFile), error);
+}
 
 fs.mkdirSync(path.dirname(routerFile), { recursive: true });
 
@@ -366,103 +369,70 @@ fs.writeFileSync(
   '// GENERATED by the ui-compile filter — do not edit.\n'
   + '// Gates every compiled layout onto the vanilla chest screen.\n'
   + '//\n'
-  + '// This has to be vanilla\'s own file. JSON UI resolves a definition from the\n'
-  + '// file that owns it, so replacing `chest.small_chest_panel_top_half` from any\n'
+  + '// This has to be the file vanilla itself owns. JSON UI resolves a definition\n'
+  + '// from the file that owns it, so replacing `chest.small_chest_panel` from any\n'
   + '// other path — same namespace or not — is silently ignored, and the ordinary\n'
   + '// chest renders instead.\n'
-  + `${JSON.stringify(
-    buildRouter({
-      screens: compiled,
-      collection: settings.collection,
-      protocolAux: settings.protocolItemAux,
-      transportOrdinal: settings.transportOrdinal,
-    }),
-    null,
-    '\t',
-  )}\n`,
+  + `${JSON.stringify(router, null, '\t')}\n`,
   'utf-8',
 );
 
 console.log(`   ↳ router → ${rel(routerFile)}`);
 
 // ---------------------------------------------------------------------------
-// Handle barrel
-// ---------------------------------------------------------------------------
-
-// One module re-exporting every screen's handle, so the project needs a single
-// tsconfig alias no matter how many screens it has.
-//
-// It has to be a barrel rather than a glob alias: the bundler's path plugin
-// strips the `*` out of a tsconfig candidate before joining the import suffix,
-// so `./packs/data/ui/*` resolves to an extensionless path esbuild cannot read.
-// A non-glob alias pointing at one real file sidesteps that entirely — the same
-// shape the i18n and guides aliases already use.
-const barrel = [
-  '// GENERATED by the ui-compile filter — do not edit.',
-  '//',
-  '// Every compiled screen, re-exported under its own name. Import the handle',
-  '// and hand it to `createContainerScreen`; it carries the slot indices, the',
-  '// bank layout and the routing key the compiler chose.',
-  '',
-  ...compiled.map(screen => `export * as ${screen.name} from './${screen.name}';`),
-  '',
-].join('\n');
-
-fs.writeFileSync(path.join(handleDir, 'index.ts'), barrel, 'utf-8');
-
-const committedBarrel = path.join(projectRoot, 'packs', settings.handleDir, 'index.ts');
-
-if (!fs.existsSync(committedBarrel) || fs.readFileSync(committedBarrel, 'utf-8') !== barrel) {
-  fs.mkdirSync(path.dirname(committedBarrel), { recursive: true });
-  fs.writeFileSync(committedBarrel, barrel, 'utf-8');
-}
-
-// ---------------------------------------------------------------------------
 // _ui_defs.json
 // ---------------------------------------------------------------------------
 
+// The router sits at vanilla's own path, which puts it in the pack's UI root —
+// the directory `_ui_defs.json` lives in.
 const added = registerUiDefs({
-  uiDefsFile: path.join(path.resolve(settings.sourceDir), '_ui_defs.json'),
+  uiDefsFile: path.join(path.dirname(routerFile), '_ui_defs.json'),
   files: [routerFile, ...compiled.map(screen => path.join(outputDir, `${screen.name}.json`))],
 });
 
 if (added > 0) {
   console.log(`   ↳ registered ${added} file(s) in _ui_defs.json`);
 }
+
 // ---------------------------------------------------------------------------
 // Entities
 // ---------------------------------------------------------------------------
 
 // A screen names the entity it opens from; the compiler knows how many slots
-// that needs. Sizing it here means nobody has to keep `inventory_size` in step
-// with a layout by hand — the failure mode of which is a screen that silently
-// draws cells the container does not have.
-const entityDir = path.resolve(settings.entityDir);
+// that needs, and the router which key picks it. Stamping both here means
+// nobody keeps `inventory_size` or a layout key in step with a layout by hand —
+// the failure mode of which is a screen that silently draws cells the container
+// does not have, or an entity that opens the wrong screen.
+const entityFiles = findFiles(path.resolve(ENTITY_DIR), '.json');
+
+/** The workspace definition of the entity with this identifier, if there is one. */
+const findEntity = identifier => entityFiles.find(
+  file => readJsonc(file)['minecraft:entity']?.description?.identifier === identifier,
+);
+
+/** @type {Map<string, string>} entity type → the screen that claimed it */
+const hosts = new Map();
 
 for (const screen of compiled) {
-  if (!screen.entity) {
-    continue;
+  const claimed = hosts.get(screen.entity);
+
+  if (claimed !== undefined) {
+    console.error(`❌ ui-compile: ${claimed} and ${screen.name} both name entity "${screen.entity}"; one entity opens one screen`);
+    process.exit(1);
   }
 
-  const files = fs.existsSync(entityDir)
-    ? fs.readdirSync(entityDir).filter(file => file.endsWith('.json'))
-    : [];
+  hosts.set(screen.entity, screen.name);
 
-  const match = files
-    .map(file => path.join(entityDir, file))
-    .find((file) => {
-      const parsed = readJsonc(file);
-
-      return parsed['minecraft:entity']?.description?.identifier === screen.entity;
-    });
+  const match = findEntity(screen.entity);
 
   if (!match) {
-    console.error(`❌ ui-compile: ${screen.name} names entity "${screen.entity}", which is not in ${settings.entityDir}`);
+    console.error(`❌ ui-compile: ${screen.name} names entity "${screen.entity}", which is not in ${ENTITY_DIR}`);
     process.exit(1);
   }
 
   const definition = readJsonc(match);
-  const components = definition['minecraft:entity'].components ??= {};
+  const entity = definition['minecraft:entity'];
+  const components = entity.components ??= {};
   const inventory = components['minecraft:inventory'] ??= {};
 
   // `container` is the only container_type that routes to the chest screen, and
@@ -471,17 +441,19 @@ for (const screen of compiled) {
   inventory.inventory_size = screen.allocation.size;
   inventory.private = false;
 
+  // The entity carries its own layout key: the runtime reads this property when
+  // a player opens it, so a screen is never looked up by entity type.
+  const properties = entity.description.properties ??= {};
+
+  properties[library.layoutProperty] = {
+    type: 'int',
+    range: [0, library.maxLayout],
+    default: screen.layoutId,
+  };
+
   fs.writeFileSync(match, `${JSON.stringify(definition, null, '\t')}\n`, 'utf-8');
 
-  console.log(`   ↳ sized ${screen.entity} to ${screen.allocation.size} slot(s)`);
-}
-
-// ---------------------------------------------------------------------------
-// Clean up
-// ---------------------------------------------------------------------------
-
-// Sources are not pack assets: shipping them exports the whole screen tree, and
-// the game logs an error for every unknown file under ui/.
-for (const screenPath of screenPaths) {
-  fs.rmSync(screenPath);
+  console.log(
+    `   ↳ ${screen.entity}: inventory_size ${screen.allocation.size}, ${library.layoutProperty} = ${screen.layoutId}`,
+  );
 }

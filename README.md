@@ -16,6 +16,7 @@ regolith config resolvers --append github.com/bedrock-core/regolith-filters/reso
 | [**generator**](./generator/README.md) | Transpiles `.ts` template files in `BP/` and `RP/` into JSON output files, typed against Mojang's official JSON Schemas. Supports single-file and multi-file (array) generation patterns. |
 | [**guides**](./guides/README.md) | Compiles MDX guide content (`data/guides/<locale>/**`) into a guide IR manifest plus auto-localized `.lang` entries, rendered in-game by `@bedrock-core/guides`. Must run **before** i18n. |
 | [**i18n**](./i18n/README.md) | TS-first localization: nested TypeScript resources become `.lang` files, a typed runtime bundle, and vanilla-key types — typed interpolation and plurals included. |
+| [**ui-compile**](./ui-compile/README.md) | Compiles container screens (`BP/scripts/**/*.screen.tsx`, JSX written with `@bedrock-core/ui`) into static JSON UI, routes the vanilla chest screen to them, and sizes the entity each one opens from. Must run **after** i18n and **before** bundler. |
 
 ## Removed Filters
 

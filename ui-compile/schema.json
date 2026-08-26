@@ -7,48 +7,7 @@
 		"namespace": {
 			"type": "string",
 			"pattern": "^[a-z0-9_]+$",
-			"default": "bcui",
-			"description": "Prefix for each screen's JSON UI namespace. A screen at reactor.screen.tsx becomes <namespace>_reactor, so two addons can ship a screen of the same name without colliding."
-		},
-		"sourceDir": {
-			"type": "string",
-			"default": "RP/ui",
-			"description": "Where screens are looked for, relative to the Regolith temp workspace. Only files ending in .screen.tsx are compiled, so ordinary .tsx helpers can sit beside them."
-		},
-		"outputDir": {
-			"type": "string",
-			"default": "RP/ui/compiled",
-			"description": "Where the emitted JSON UI is written. Must also be listed in _ui_defs.json."
-		},
-		"routerFile": {
-			"type": "string",
-			"default": "RP/ui/chest_screen.json",
-			"description": "Where the router is written. Must be the path vanilla itself uses for the screen being overridden — JSON UI resolves a definition from the file that owns it, so a replacement declared in any other file is silently ignored and the vanilla screen renders."
-		},
-		"handleDir": {
-			"type": "string",
-			"default": "BP/scripts/generated",
-			"description": "Where the typed handle for each screen is written. The behaviour pack imports these to address slots by name."
-		},
-		"entityDir": {
-			"type": "string",
-			"default": "BP/entities",
-			"description": "Where entity definitions are looked for when a screen names the entity it opens from."
-		},
-		"protocolItemAux": {
-			"type": "number",
-			"default": 40763392,
-			"description": "Aux id of the marker item placed in slot 0. It is the protocol key every compiled screen shares, and the item must be damageable because its durability carries the layout key. Defaults to a netherite pickaxe, which allows 2031 layouts."
-		},
-		"collection": {
-			"type": "string",
-			"default": "container_items",
-			"description": "The JSON UI collection slots and channels read. Only worth changing to target a screen other than the chest."
-		},
-		"jsxImportSource": {
-			"type": "string",
-			"default": "@bedrock-core/ui",
-			"description": "jsxImportSource used when bundling a screen. Match your tsconfig, or the JSX in a screen will not resolve."
+			"description": "The addon's namespace. It prefixes every screen's JSON UI namespace as <namespace>_<name>, so an addon's UI carries its own name and never collides with another addon's. Left unset, it is read from the creator/pack in core.register(), the way the other filters resolve it."
 		}
 	}
 }
