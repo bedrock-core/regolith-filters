@@ -5,8 +5,9 @@
 // nobody can see until a build has run — asking someone to keep a list of them
 // in step by hand is how a screen silently stops rendering.
 //
-// This edits the copy in the Regolith workspace. The user's own `_ui_defs.json`
-// is left exactly as they wrote it.
+// This edits the copy in the Regolith workspace, or writes one when the pack
+// has none — an addon with no UI of its own before this build. The user's own
+// `_ui_defs.json` is left exactly as they wrote it.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -18,16 +19,18 @@ import path from 'node:path';
  * @returns {number} how many entries were added
  */
 export function registerUiDefs({ uiDefsFile, files }) {
-  if (!fs.existsSync(uiDefsFile)) {
-    return 0;
-  }
-
-  const raw = fs.readFileSync(uiDefsFile, 'utf-8');
   const uiRoot = path.dirname(uiDefsFile);
-
   const entries = files.map(
     file => `ui/${path.relative(uiRoot, file).split(path.sep).join('/')}`,
   );
+
+  if (!fs.existsSync(uiDefsFile)) {
+    fs.writeFileSync(uiDefsFile, `${JSON.stringify({ ui_defs: entries }, null, '\t')}\n`, 'utf-8');
+
+    return entries.length;
+  }
+
+  const raw = fs.readFileSync(uiDefsFile, 'utf-8');
 
   // A plain substring check: the file is JSONC, and reformatting someone's
   // comments and spacing to add one line would be a poor trade.

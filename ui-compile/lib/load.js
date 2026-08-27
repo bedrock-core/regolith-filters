@@ -21,10 +21,10 @@ const stub = path.join(import.meta.dirname, 'stubs', 'minecraft.cjs');
  * @typedef {object} CompiledScreen
  * @property {string} name        the screen's name, from its file name
  * @property {string} namespace   JSON UI namespace the layout was emitted into
- * @property {number} layoutId    key the router picks this layout by
+ * @property {number} layoutId    key the router picks this layout by, derived from `<namespace>_<name>`
  * @property {string} entity      type of the entity the screen opens from
  * @property {object} document    the emitted JSON UI document
- * @property {{ sentinel: number, drawn: number, channels: number, size: number }} allocation
+ * @property {{ sentinels: number, drawn: number, channels: number, size: number }} allocation
  * @property {boolean} hasBackdrop
  * @property {boolean} hasText    whether any text is live, i.e. decoded through the character table
  */
@@ -32,7 +32,7 @@ const stub = path.join(import.meta.dirname, 'stubs', 'minecraft.cjs');
 /**
  * @typedef {object} ScreenBundle
  * @property {CompiledScreen} compiled
- * @property {(screens: CompiledScreen[]) => object} buildRouter the `chest` namespace document covering every screen
+ * @property {(screens: CompiledScreen[]) => { hooks: { file: string, document: object }[], router: object, routerFile: string }} buildRouter the addon's hooks into vanilla's chest files, its router, and the router's pack path
  * @property {string[]} lang           the `.lang` lines live text decodes through
  * @property {string} layoutProperty   entity property the runtime reads the layout key from
  * @property {number} maxLayout        highest layout key the runtime can address
@@ -45,9 +45,8 @@ const stub = path.join(import.meta.dirname, 'stubs', 'minecraft.cjs');
  * @param {string} screenPath absolute path of the screen module
  * @param {string} name       the screen's name
  * @param {string} namespace  the addon namespace the screen is emitted under
- * @param {number} layoutId   key the router picks this layout by
  */
-const entrySource = (screenPath, name, namespace, layoutId) => `
+const entrySource = (screenPath, name, namespace) => `
 // Namespace import, not a named one: esbuild fails the build outright on a
 // named import a module does not export, and a missing default deserves the
 // message below instead.
@@ -64,7 +63,7 @@ if (typeof Screen !== 'function') {
 // The COMPONENT, not the result of calling it: the compiler renders it under
 // its own owner, which is what makes the hooks inside it resolve.
 export default {
-  compiled: compileScreen(Screen, { name: ${JSON.stringify(name)}, namespace: ${JSON.stringify(namespace)}, layoutId: ${layoutId} }),
+  compiled: compileScreen(Screen, { name: ${JSON.stringify(name)}, namespace: ${JSON.stringify(namespace)} }),
   buildRouter,
   lang: charsetLang(),
   layoutProperty: LAYOUT_PROPERTY,
@@ -77,15 +76,14 @@ export default {
  * @param {string} options.screenPath      absolute path of the screen module
  * @param {string} options.name            the screen's name
  * @param {string} options.namespace       the addon namespace the screen is emitted under
- * @param {number} options.layoutId        key the router picks this layout by
  * @param {string} options.cacheDir        where transpiled intermediates land
  * @param {string} options.jsxImportSource jsxImportSource for the screen's JSX
  * @returns {Promise<ScreenBundle>}
  */
-export async function loadScreen({ screenPath, name, namespace, layoutId, cacheDir, jsxImportSource }) {
+export async function loadScreen({ screenPath, name, namespace, cacheDir, jsxImportSource }) {
   const result = await build({
     stdin: {
-      contents: entrySource(screenPath, name, namespace, layoutId),
+      contents: entrySource(screenPath, name, namespace),
       resolveDir: path.dirname(screenPath),
       sourcefile: `${path.basename(screenPath)}.entry.tsx`,
       loader: 'tsx',
