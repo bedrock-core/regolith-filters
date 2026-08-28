@@ -1,5 +1,5 @@
 {
-	"description": "Compiles container screens written in JSX into static JSON UI, routes the chest screen to them, and stamps the entity each one opens from.",
+	"description": "Compiles screens written in JSX into static JSON UI — a container screen onto the chest, a form screen onto the server form — and wires each to the runtime that serves it.",
 	"filters": [
 		{
 			"name": "Compile UI Screens",

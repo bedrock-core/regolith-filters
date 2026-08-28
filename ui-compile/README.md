@@ -1,19 +1,28 @@
 # ui-compile
 
-A Regolith filter that compiles **container screens** — a custom entity's chest screen, written
-in JSX with the same components as a form — into static JSON UI, and prepares everything the
-runtime half of [`@bedrock-core/ui`](https://github.com/bedrock-core/ui) needs to drive them: the
-hook and router that put a compiled layout on the vanilla chest screen, the character table live
-text decodes through, and the entity each screen opens from.
+A Regolith filter that compiles **screens written in JSX** into static JSON UI, and prepares
+everything the runtime half of [`@bedrock-core/ui`](https://github.com/bedrock-core/ui) needs to
+drive them.
 
-A server form is serialized per player at runtime. A container screen cannot be: the chest
-screen has no string channel wide enough to carry a layout, so the layout is baked at build time
-and only state travels at runtime, through the container's own slots. This filter is the baking.
+Two kinds of screen, from the same components and the same file naming. What decides which is
+the **root the author wrote**:
+
+| Root | Screen | What the layout is mounted on |
+| --- | --- | --- |
+| `<Container entity>` | a custom entity's chest screen | the vanilla chest, through a hook and a router |
+| anything else | a server form | the library's own container, which is already gated on the protocol header — no vanilla file is touched |
+
+Compiling is worth different things to each. A container screen **cannot** be serialized at all:
+the chest screen has no string channel wide enough to carry a layout, so baking is the only way
+it exists. A form screen can be serialized, and is by default — compiling it means the layout is
+written into the pack once instead of being shipped again on every press, and only what changed
+travels.
 
 ## Authoring
 
 A screen is a script module ending in `.screen.tsx`, anywhere under `BP/scripts`, that
-default-exports a component rendering a `<Container>` at its root:
+default-exports a component. A `<Container>` at its root makes it a container screen; anything
+else makes it a form.
 
 ```tsx
 // packs/BP/scripts/screens/furnace.screen.tsx
@@ -38,6 +47,41 @@ serves it to every player who opens the entity. The build runs the component onc
 up position for position because a compiled screen cannot change shape. Nothing about a screen
 is declared twice.
 
+A form screen is the same file without the `<Container>`, and is opened with `render()` like any
+other screen:
+
+```tsx
+// packs/BP/scripts/screens/counter.screen.tsx
+/** @jsxImportSource @bedrock-core/ui */
+import { Button, Panel, Text, useState } from '@bedrock-core/ui';
+
+export default function Counter() {
+  const [count, setCount] = useState(0);
+
+  return (
+    <Panel padding={8} gap={6}>
+      <Text maxLength={16}>{`count ${count}`}</Text>
+      <Button enabled={count < 9} onPress={() => setCount(n => n + 1)}>{'+'}</Button>
+    </Panel>
+  );
+}
+```
+
+```ts
+// anywhere in the addon
+import '@bedrock-core/generated/ui';   // once: what tells the runtime this screen was compiled
+import Counter from './screens/counter.screen';
+
+render(Counter, player);
+```
+
+Without that import every screen still renders — serialized by the interpreter, exactly as
+before — which is what makes compiling additive rather than a migration.
+
+A compiled screen is baked, so the same two rules apply to both kinds: `<Text>` that changes
+needs `maxLength` to reserve room for it, and the shape cannot move between renders. The build
+refuses a screen that breaks either, naming the string it saw change.
+
 ### The one rule
 
 **A screen module — and everything it imports — must not touch the world at import time.**
@@ -58,7 +102,10 @@ like any other script.
 
 | Output | Where | Why |
 | --- | --- | --- |
-| `RP/ui/core-ui/screens/<name>.json` | Regolith temp | the compiled screen — one JSON UI namespace, `<namespace>_<name>`, per screen |
+| `RP/ui/core-ui/screens/<name>.json` | Regolith temp | the compiled screen — one JSON UI namespace, `<namespace>_<name>`, per screen, whichever kind it is |
+| `RP/ui/core-ui/screens/<namespace>_forms.json` | Regolith temp | the addon's compiled FORM screens: one gated host each, picked by the title the runtime opens them with |
+| `RP/ui/core-ui/form/mount.json` | Regolith temp (edited or new copy) | the addon's insert into the library's form mount. A modification of the mount's own path, so every pack's copy stacks |
+| `data/ui/ui.generated.ts` | Regolith temp | one `registerCompiledScreen` call per compiled form. Import it once (`@bedrock-core/generated/ui`) and `render()` shows those screens from the pack instead of serializing them |
 | `RP/ui/core-ui/screens/<namespace>_router.json` | Regolith temp | the addon's router: a gated host per screen under the addon's root — see [The router](#the-router) |
 | `RP/ui/chest_screen.json` | Regolith temp | the hook: a copy of vanilla's chest file holding one `modifications` entry, inserting the addon's root into the chest top half the render pack's chest root mounts on both UI profiles |
 | `RP/ui/_ui_defs.json` | Regolith temp (edited or new copy) | the three above registered, or the game never loads them |

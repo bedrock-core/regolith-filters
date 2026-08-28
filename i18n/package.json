@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "Regolith filter that compiles nested TypeScript translation resources into .lang files, a measurement bundle and i18next type augmentation.",
   "type": "module",
+  "engines": {
+    "node": ">=22.18.0"
+  },
   "packageManager": "yarn@4.9.4",
   "scripts": {
     "test": "vitest run"

@@ -30,9 +30,21 @@ const stub = path.join(import.meta.dirname, 'stubs', 'minecraft.cjs');
  */
 
 /**
+ * @typedef {object} CompiledFormScreen
+ * @property {string} name
+ * @property {string} addon
+ * @property {string} namespace   JSON UI namespace the layout was emitted into
+ * @property {string} title       what the runtime shows the form with, and what the mount gates on
+ * @property {object} document    the emitted JSON UI document
+ * @property {boolean} hasBackdrop
+ */
+
+/**
  * @typedef {object} ScreenBundle
- * @property {CompiledScreen} compiled
+ * @property {'chest' | 'form'} kind   which screen the author's root asked for
+ * @property {CompiledScreen | CompiledFormScreen} compiled
  * @property {(screens: CompiledScreen[]) => { hooks: { file: string, document: object }[], router: object, routerFile: string }} buildRouter the addon's hooks into vanilla's chest files, its router, and the router's pack path
+ * @property {(screens: object[], addon: string) => { hook: { file: string, document: object }, router: object, routerFile: string }} formRouter the addon's hook into the compiled-form mount, and its router
  * @property {string[]} lang           the `.lang` lines live text decodes through
  * @property {string} layoutProperty   entity property the runtime reads the layout key from
  * @property {number} maxLayout        highest layout key the runtime can address
@@ -51,8 +63,10 @@ const entrySource = (screenPath, name, namespace) => `
 // named import a module does not export, and a missing default deserves the
 // message below instead.
 import * as screenModule from ${JSON.stringify(screenPath)};
-import { buildRouter, compileScreen } from '@bedrock-core/ui-compile';
-import { charsetLang, LAYOUT_PROPERTY, MAX_LAYOUT } from '@bedrock-core/ui-runtime/compile';
+import { buildRouter, compileFormScreen, compileScreen, formRouter } from '@bedrock-core/ui-compile';
+import {
+  buildScreenOnce, charsetLang, concreteRoots, CONTAINER_TYPE, LAYOUT_PROPERTY, MAX_LAYOUT,
+} from '@bedrock-core/ui-runtime/compile';
 
 const Screen = screenModule.default;
 
@@ -60,11 +74,21 @@ if (typeof Screen !== 'function') {
   throw new Error('a screen module must default-export a component');
 }
 
+// Which screen the author asked for is the root they wrote: \`<Container>\` is a
+// chest screen the way \`<Form>\` is a modal. Built once here to read that, and
+// again by the compiler — a build render is cheap and leaves nothing behind.
+const roots = concreteRoots(buildScreenOnce(Screen));
+const kind = roots.length === 1 && roots[0].type === CONTAINER_TYPE ? 'chest' : 'form';
+
 // The COMPONENT, not the result of calling it: the compiler renders it under
 // its own owner, which is what makes the hooks inside it resolve.
 export default {
-  compiled: compileScreen(Screen, { name: ${JSON.stringify(name)}, namespace: ${JSON.stringify(namespace)} }),
+  kind,
+  compiled: kind === 'chest'
+    ? compileScreen(Screen, { name: ${JSON.stringify(name)}, namespace: ${JSON.stringify(namespace)} })
+    : compileFormScreen(Screen, { name: ${JSON.stringify(name)}, namespace: ${JSON.stringify(namespace)} }),
   buildRouter,
+  formRouter,
   lang: charsetLang(),
   layoutProperty: LAYOUT_PROPERTY,
   maxLayout: MAX_LAYOUT,

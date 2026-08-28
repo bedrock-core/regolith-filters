@@ -27,9 +27,10 @@ regolith install github.com/bedrock-core/regolith-filters/bundler
 
 ## Requirements
 
-1. **tsconfig.json** - Create a `tsconfig.json` in your project root
-2. **package.json** - Set up your dependencies and TypeScript types
-3. **packs/BP/scripts/** - Place your TypeScript files here
+1. **Node.js 22.18 or newer** - the filter's own source is TypeScript, which Node runs directly
+2. **tsconfig.json** - Create a `tsconfig.json` in your project root
+3. **package.json** - Set up your dependencies and TypeScript types
+4. **packs/BP/scripts/** - Place your TypeScript files here
 
 ## Configuration
 

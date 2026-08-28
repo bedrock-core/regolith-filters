@@ -8,6 +8,13 @@ You can add this repository as a regolith resolver by running
 regolith config resolvers --append github.com/bedrock-core/regolith-filters/resolver.json
 ```
 
+## Requirements
+
+**Node.js 22.18 or newer.** The filters are written in TypeScript and Regolith runs them
+directly — Node strips the types on the way in, so there is no build step and nothing compiled
+is committed. Types are checked separately with `npm run typecheck` at the root; that check
+emits nothing and is not part of a build.
+
 ## Filters
 
 | Filter | Description |
