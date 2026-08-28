@@ -12,13 +12,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-/**
- * @param {object} options
- * @param {string} options.uiDefsFile absolute path of `_ui_defs.json` in the workspace
- * @param {string[]} options.files    absolute paths of the emitted UI files
- * @returns {number} how many entries were added
- */
-export function registerUiDefs({ uiDefsFile, files }) {
+export interface UiDefsRegistration {
+  /** Absolute path of `_ui_defs.json` in the workspace. */
+  uiDefsFile: string;
+  /** Absolute paths of the emitted UI files. */
+  files: string[];
+}
+
+/** @returns how many entries were added */
+export function registerUiDefs({ uiDefsFile, files }: UiDefsRegistration): number {
   const uiRoot = path.dirname(uiDefsFile);
   const entries = files.map(
     file => `ui/${path.relative(uiRoot, file).split(path.sep).join('/')}`,

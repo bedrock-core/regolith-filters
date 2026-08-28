@@ -6,13 +6,16 @@
 // would throw that edit away. So a hook is MERGED: the file's existing
 // modifications of each panel come first, the addon's follow.
 
-/**
- * Reads a pack JSON file that may carry comments. Comments do not survive.
- *
- * @param {string} raw
- * @returns {object}
- */
-export const parseJsonc = (raw) => {
+/** One JSON UI document: a namespace, and definitions or modification entries. */
+export type Document = Record<string, unknown>;
+
+/** A definition carrying modifications, which is all a hook may add to. */
+interface Modifiable {
+  modifications?: unknown[];
+}
+
+/** Reads a pack JSON file that may carry comments. Comments do not survive. */
+export const parseJsonc = (raw: string): Document => {
   let out = '';
   let inString = false;
   let escaped = false;
@@ -67,19 +70,19 @@ export const parseJsonc = (raw) => {
     out += char;
   }
 
-  return JSON.parse(out);
+  return JSON.parse(out) as Document;
 };
 
 /**
  * The hook document merged over what the file already holds.
  *
- * @param {string | undefined} existing the file's current text, if there is one
- * @param {object} hook the hook document: a namespace and modification entries
- * @returns {object} the document to write
+ * @param existing the file's current text, if there is one
+ * @param hook the hook document: a namespace and modification entries
+ * @returns the document to write
  * @throws when the file defines a panel the hook modifies: that definition would
  *   replace vanilla's, which is the one thing a hook must never do
  */
-export const mergeHook = (existing, hook) => {
+export const mergeHook = (existing: string | undefined, hook: Document): Document => {
   if (existing === undefined) {
     return hook;
   }
@@ -91,7 +94,7 @@ export const mergeHook = (existing, hook) => {
       continue;
     }
 
-    const current = merged[name];
+    const current = merged[name] as Modifiable | undefined;
 
     if (current === undefined) {
       merged[name] = entry;
@@ -101,12 +104,14 @@ export const mergeHook = (existing, hook) => {
 
     if (!Array.isArray(current.modifications)) {
       throw new Error(
-        `${hook.namespace}.${name} is DEFINED in the pack's own copy of the file; `
+        `${String(hook.namespace)}.${name} is DEFINED in the pack's own copy of the file; `
         + 'a hook can only add modifications to it, and a definition there replaces vanilla\'s for every pack',
       );
     }
 
-    merged[name] = { ...current, modifications: [...current.modifications, ...entry.modifications] };
+    const added = (entry as Modifiable).modifications ?? [];
+
+    merged[name] = { ...current, modifications: [...current.modifications, ...added] };
   }
 
   return merged;

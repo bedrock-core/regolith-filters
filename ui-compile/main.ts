@@ -28,9 +28,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { mergeHook, parseJsonc } from './lib/hooks.js';
-import { loadScreen } from './lib/load.js';
-import { registerUiDefs } from './lib/uiDefs.js';
+import type { Document } from './lib/hooks.ts';
+import { mergeHook, parseJsonc } from './lib/hooks.ts';
+import type { CompiledFormScreen, CompiledScreen, Hook, ScreenBundle } from './lib/load.ts';
+import { loadScreen } from './lib/load.ts';
+import { registerUiDefs } from './lib/uiDefs.ts';
 
 const projectRoot = process.env['ROOT_DIR'];
 
@@ -68,8 +70,29 @@ const GENERATED_FILE = 'ui.generated.ts';
 // own — from one that only extends it.
 const MOUNT_TARGET = 'compiled_root';
 
+/** The mount definition an addon's compiled form screens are listed in. */
+interface MountRoot {
+  controls: Record<string, unknown>[];
+}
+
+/** Only the parts of an entity file this filter writes. */
+interface EntityFile {
+  'minecraft:entity': {
+    description: {
+      identifier?: string;
+      properties?: Record<string, unknown>;
+    };
+    components?: Record<string, Record<string, unknown>>;
+  };
+}
+
+/** Settings Regolith passes as argv[2]. The namespace is the only one. */
+interface Settings {
+  namespace?: string;
+}
+
 // The one setting: the addon's namespace. Everything else is fixed above.
-const settings = JSON.parse(process.argv[2] ?? '{}');
+const settings = JSON.parse(process.argv[2] ?? '{}') as Settings;
 
 const cacheDir = path.join(projectRoot, '.regolith', 'cache', 'ui-compile');
 
@@ -80,14 +103,8 @@ const cacheDir = path.join(projectRoot, '.regolith', 'cache', 'ui-compile');
 /** Screens are marked by extension, so ordinary .tsx helpers can sit beside them. */
 const SCREEN_SUFFIX = '.screen.tsx';
 
-/**
- * Every file under `dir` whose name ends in `suffix`, recursively.
- *
- * @param {string} dir
- * @param {string} suffix
- * @returns {string[]}
- */
-function findFiles(dir, suffix) {
+/** Every file under `dir` whose name ends in `suffix`, recursively. */
+function findFiles(dir: string, suffix: string): string[] {
   if (!fs.existsSync(dir)) {
     return [];
   }
@@ -111,7 +128,7 @@ if (screenPaths.length === 0) {
   process.exit(0);
 }
 
-const rel = file => path.relative(projectRoot, file).replaceAll('\\', '/');
+const rel = (file: string): string => path.relative(projectRoot, file).replaceAll('\\', '/');
 
 // The name is the JSON UI namespace and the output file, so it has to be unique
 // across the addon whatever directory a screen sits in.
@@ -134,9 +151,9 @@ if (duplicate !== undefined) {
 const CREATOR_RE = /\bcreator\s*:\s*(['"`])([a-z0-9_]+)\1/g;
 const PACK_RE = /\bpack\s*:\s*(['"`])([a-z0-9_]+)\1/g;
 
-const scanNamespace = (dir) => {
-  const creators = new Set();
-  const packs = new Set();
+const scanNamespace = (dir: string): string | undefined => {
+  const creators = new Set<string>();
+  const packs = new Set<string>();
 
   for (const file of [...findFiles(dir, '.ts'), ...findFiles(dir, '.tsx'), ...findFiles(dir, '.js')]) {
     const text = fs.readFileSync(file, 'utf-8');
@@ -145,12 +162,12 @@ const scanNamespace = (dir) => {
       continue;
     }
 
-    for (const m of text.matchAll(CREATOR_RE)) creators.add(m[2]);
-    for (const m of text.matchAll(PACK_RE)) packs.add(m[2]);
+    for (const m of text.matchAll(CREATOR_RE)) if (m[2] !== undefined) creators.add(m[2]);
+    for (const m of text.matchAll(PACK_RE)) if (m[2] !== undefined) packs.add(m[2]);
   }
 
   return creators.size === 1 && packs.size === 1
-    ? `${[...creators][0]}_${[...packs][0]}`
+    ? `${[...creators][0] ?? ''}_${[...packs][0] ?? ''}`
     : undefined;
 };
 
@@ -185,7 +202,7 @@ console.log(`🏷️  ui-compile: namespace "${namespace}"`);
  * only the workspace copy is ever written back -- the author's own file is
  * left exactly as they wrote it.
  */
-const readJsonc = file => parseJsonc(fs.readFileSync(file, 'utf-8'));
+const readJsonc = (file: string): Document => parseJsonc(fs.readFileSync(file, 'utf-8'));
 
 /**
  * Relays a failure the way the compiler worded it, and stops the build.
@@ -194,10 +211,19 @@ const readJsonc = file => parseJsonc(fs.readFileSync(file, 'utf-8'));
  * lists what is supported, an oversized screen gives the canvas. Relaying the
  * message unchanged beats wrapping it.
  */
-const fail = (context, error) => {
+const fail = (context: string, error: unknown): never => {
   console.error(`❌ ui-compile: ${context}`);
   console.error(String(error instanceof Error ? error.message : error));
   process.exit(1);
+};
+
+/** {@link mergeHook}, with a failure relayed the way every other one is. */
+const mergeOrFail = (existing: string | undefined, hook: Document, context: string): Document => {
+  try {
+    return mergeHook(existing, hook);
+  } catch (error) {
+    return fail(context, error);
+  }
 };
 
 const outputDir = path.resolve(OUTPUT_DIR);
@@ -219,21 +245,26 @@ const formSources = new Map();
 let library;
 
 for (const [index, screenPath] of screenPaths.entries()) {
-  const name = names[index];
+  const name = names[index] ?? path.basename(screenPath, SCREEN_SUFFIX);
 
-  try {
-    library = await loadScreen({
-      screenPath,
-      name,
-      namespace,
-      cacheDir,
-      jsxImportSource: JSX_IMPORT_SOURCE,
-    });
-  } catch (error) {
-    fail(rel(screenPath), error);
-  }
+  // `.catch` rather than try/catch, so the result stays a value.
+  //
+  // A `let` assigned inside a `try` is never DEFINITELY assigned afterwards as
+  // far as the checker is concerned — the try may throw before the assignment,
+  // and it will not follow a `never`-returning call in the catch to rule that
+  // out. Catching on the promise keeps `fail`'s `never` in the type, so there
+  // is no `undefined` to assert away.
+  const bundle = await loadScreen({
+    screenPath,
+    name,
+    namespace,
+    cacheDir,
+    jsxImportSource: JSX_IMPORT_SOURCE,
+  }).catch((error: unknown) => fail(rel(screenPath), error));
 
-  const screen = library.compiled;
+  library = bundle;
+
+  const screen = bundle.compiled;
 
   const header = [
     '// GENERATED by the ui-compile filter — do not edit.',
@@ -247,21 +278,33 @@ for (const [index, screenPath] of screenPaths.entries()) {
     'utf-8',
   );
 
-  if (library.kind === 'chest') {
-    compiled.push(screen);
+  if (bundle.kind === 'chest') {
+    const chest = screen as CompiledScreen;
 
-    const { drawn, channels, size } = screen.allocation;
+    compiled.push(chest);
+
+    const { drawn, channels, size } = chest.allocation;
 
     console.log(
       `✅ ui-compile: ${name} — chest, ${drawn} slot(s), ${channels} channel(s), inventory_size ${size}`,
     );
   } else {
-    forms.push(screen);
+    const form = screen as CompiledFormScreen;
+
+    forms.push(form);
     formSources.set(name, screenPath);
 
-    console.log(`✅ ui-compile: ${name} — form, ${screen.entries.length} entry(s)`);
+    console.log(`✅ ui-compile: ${name} — form, ${form.entries.length} entry(s)`);
   }
 }
+
+if (library === undefined) {
+  throw new Error('unreachable: every screen either loads a bundle or stops the build');
+}
+
+// Captured as a const: narrowing a `let` does not survive into a later loop
+// body, and re-asserting it at each use is worse than naming it once.
+const runtime = library;
 
 // ---------------------------------------------------------------------------
 // Character table
@@ -277,7 +320,7 @@ for (const [index, screenPath] of screenPaths.entries()) {
 // own texts/.
 if (compiled.some(screen => screen.hasText)) {
   const textsDir = path.resolve(TEXTS_DIR);
-  const lines = library.lang;
+  const lines = runtime.lang;
 
   fs.mkdirSync(textsDir, { recursive: true });
 
@@ -321,11 +364,15 @@ if (compiled.some(screen => screen.hasText)) {
 // modification of the file at vanilla's own path stacks with them in whatever
 // order the packs sit — the one mechanism that lets addons built apart meet
 // on the same chest.
-let routing = { hooks: [], router: undefined, routerFile: undefined };
+let routing: { hooks: Hook[]; router: Document | undefined; routerFile: string | undefined } = {
+  hooks: [],
+  router: undefined,
+  routerFile: undefined,
+};
 
 if (compiled.length > 0) {
   try {
-    routing = library.buildRouter(compiled);
+    routing = runtime.buildRouter(compiled);
   } catch (error) {
     fail(OUTPUT_DIR, error);
   }
@@ -393,38 +440,45 @@ if (routerFile !== undefined) {
 const formFiles = [];
 
 if (forms.length > 0) {
-  let formRouting;
+  let formRouting: ReturnType<ScreenBundle['formRouter']> | undefined;
 
   try {
-    formRouting = library.formRouter(forms, namespace);
+    formRouting = runtime.formRouter(forms, namespace);
   } catch (error) {
     fail(OUTPUT_DIR, error);
+  }
+
+  if (formRouting === undefined) {
+    throw new Error('unreachable: formRouter neither returned nor failed');
   }
 
   const formRouterFile = path.resolve(RESOURCE_PACK, formRouting.routerFile);
   const mountFile = path.resolve(RESOURCE_PACK, formRouting.hook.file);
   const existingMount = fs.existsSync(mountFile) ? fs.readFileSync(mountFile, 'utf-8') : undefined;
-  const owned = existingMount !== undefined && parseJsonc(existingMount)[MOUNT_TARGET]?.controls !== undefined;
-  let mount;
-  let note;
+  const owned = existingMount !== undefined
+    && (parseJsonc(existingMount)[MOUNT_TARGET] as MountRoot | undefined)?.controls !== undefined;
+  let mount: Document;
+  let note: string;
 
   if (owned) {
     // The one pack that both DEFINES the mount and compiles screens onto it is
     // the library's own. Modifying a definition the same file declares would be
     // asking the engine to patch what it is reading; the root goes straight
     // into the definition instead.
-    mount = parseJsonc(existingMount);
-    mount[MOUNT_TARGET].controls = [
-      ...mount[MOUNT_TARGET].controls.filter(entry => Object.keys(entry)[0] !== `${namespace}`),
-      ...formRouting.hook.document[MOUNT_TARGET].modifications[0].value,
+    mount = parseJsonc(existingMount as string);
+
+    const root = mount[MOUNT_TARGET] as MountRoot;
+    const inserted = (formRouting.hook.document[MOUNT_TARGET] as {
+      modifications: { value: Record<string, unknown>[] }[];
+    }).modifications[0]?.value ?? [];
+
+    root.controls = [
+      ...root.controls.filter(entry => Object.keys(entry)[0] !== namespace),
+      ...inserted,
     ];
     note = '// This pack defines the mount, so its own screens are listed in it directly.';
   } else {
-    try {
-      mount = mergeHook(existingMount, formRouting.hook.document);
-    } catch (error) {
-      fail(rel(mountFile), error);
-    }
+    mount = mergeOrFail(existingMount, formRouting.hook.document, rel(mountFile));
 
     note = '// A modification of the mount\'s own path, defining nothing: modifications\n'
       + '// resolve per path, so every pack\'s copy stacks in pack order.';
@@ -460,7 +514,7 @@ if (forms.length > 0) {
   // that can carry the association is a module importing both — which the
   // bundler inlines like any other import.
   const generatedDir = path.resolve(GENERATED_DIR);
-  const specifierFor = (source) => {
+  const specifierFor = (source: string): string => {
     const relative = path.relative(generatedDir, source).replaceAll('\\', '/').replace(/\.tsx?$/, '');
 
     return relative.startsWith('.') ? relative : `./${relative}`;
@@ -527,8 +581,8 @@ if (added > 0) {
 const entityFiles = findFiles(path.resolve(ENTITY_DIR), '.json');
 
 /** The workspace definition of the entity with this identifier, if there is one. */
-const findEntity = identifier => entityFiles.find(
-  file => readJsonc(file)['minecraft:entity']?.description?.identifier === identifier,
+const findEntity = (identifier: string): string | undefined => entityFiles.find(
+  file => (readJsonc(file) as unknown as EntityFile)['minecraft:entity']?.description?.identifier === identifier,
 );
 
 /** @type {Map<string, string>} entity type → the screen that claimed it */
@@ -551,7 +605,7 @@ for (const screen of compiled) {
     process.exit(1);
   }
 
-  const definition = readJsonc(match);
+  const definition = readJsonc(match) as unknown as EntityFile;
   const entity = definition['minecraft:entity'];
   const components = entity.components ??= {};
   const inventory = components['minecraft:inventory'] ??= {};
@@ -567,16 +621,17 @@ for (const screen of compiled) {
   // is derived from the screen's namespaced name, so a rebuild — or another
   // addon's build — never moves it.
   const properties = entity.description.properties ??= {};
+  const { layoutProperty, maxLayout } = runtime;
 
-  properties[library.layoutProperty] = {
+  properties[layoutProperty] = {
     type: 'int',
-    range: [0, library.maxLayout],
+    range: [0, maxLayout],
     default: screen.layoutId,
   };
 
   fs.writeFileSync(match, `${JSON.stringify(definition, null, '\t')}\n`, 'utf-8');
 
   console.log(
-    `   ↳ ${screen.entity}: inventory_size ${screen.allocation.size}, ${library.layoutProperty} = ${screen.layoutId}`,
+    `   ↳ ${screen.entity}: inventory_size ${screen.allocation.size}, ${layoutProperty} = ${screen.layoutId}`,
   );
 }

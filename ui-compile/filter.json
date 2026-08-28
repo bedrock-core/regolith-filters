@@ -4,7 +4,7 @@
 		{
 			"name": "Compile UI Screens",
 			"runWith": "nodejs",
-			"script": "./main.js"
+			"path": "./main.ts"
 		}
 	]
 }
