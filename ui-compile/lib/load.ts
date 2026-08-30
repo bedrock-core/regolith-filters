@@ -47,6 +47,8 @@ export interface CompiledFormScreen {
   document: Document;
   /** Every entry the runtime emits, in order. The nth is `response.selection` n. */
   entries: readonly unknown[];
+  /** What the build baked, registered beside the title for the runtime and `debug`. */
+  snapshot: { shape: string; baked: readonly string[]; vis: readonly number[] };
   hasBackdrop: boolean;
 }
 
@@ -83,6 +85,8 @@ export interface ScreenBundle {
   layoutProperty: string;
   /** Highest layout key the runtime can address. */
   maxLayout: number;
+  /** The encoding and vocabulary windows of the library the screen was compiled against. */
+  windows: { encodingMin: number; encodingMax: number; vocabularyMin: number; vocabularyMax: number };
 }
 
 /**
@@ -100,7 +104,8 @@ const entrySource = (screenPath: string, name: string, namespace: string): strin
 import * as screenModule from ${JSON.stringify(screenPath)};
 import { buildRouter, compileFormScreen, compileScreen, formRouter } from '@bedrock-core/ui-compile';
 import {
-  buildScreenOnce, charsetLang, concreteRoots, CONTAINER_TYPE, LAYOUT_PROPERTY, MAX_LAYOUT,
+  buildScreenOnce, charsetLang, concreteRoots, CONTAINER_TYPE, ENCODING_MAX, ENCODING_MIN,
+  LAYOUT_PROPERTY, MAX_LAYOUT, VOCABULARY_MAX, VOCABULARY_MIN,
 } from '@bedrock-core/ui-runtime/compile';
 
 const Screen = screenModule.default;
@@ -127,6 +132,12 @@ export default {
   lang: charsetLang(),
   layoutProperty: LAYOUT_PROPERTY,
   maxLayout: MAX_LAYOUT,
+  windows: {
+    encodingMin: ENCODING_MIN,
+    encodingMax: ENCODING_MAX,
+    vocabularyMin: VOCABULARY_MIN,
+    vocabularyMax: VOCABULARY_MAX,
+  },
 };
 `;
 

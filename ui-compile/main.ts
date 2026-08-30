@@ -524,6 +524,7 @@ if (forms.length > 0) {
     alias: `Screen${index}`,
     source: specifierFor(formSources.get(screen.name)),
     title: screen.title,
+    snapshot: screen.snapshot,
   }));
 
   fs.mkdirSync(generatedDir, { recursive: true });
@@ -536,11 +537,18 @@ if (forms.length > 0) {
       '// The build knows a screen by its file and the runtime by the component it',
       '// is handed, so this module is what associates the two: import it once and',
       '// every compiled screen renders from the pack instead of being serialized.',
+      '//',
+      '// Each registration also carries the build\'s snapshot: the carried-visible',
+      '// ordinals the runtime re-marks on its own tree, and the shape and baked',
+      '// strings a `debug` render is diffed against.',
+      '//',
+      `// encoding ${runtime.windows.encodingMax} (window ${runtime.windows.encodingMin}..${runtime.windows.encodingMax}), vocabulary ${runtime.windows.vocabularyMax} (window ${runtime.windows.vocabularyMin}..${runtime.windows.vocabularyMax})`,
       '',
       'import { registerCompiledScreen } from \'@bedrock-core/ui\';',
       ...registrations.map(entry => `import ${entry.alias} from '${entry.source}';`),
       '',
-      ...registrations.map(entry => `registerCompiledScreen(${entry.alias}, ${JSON.stringify(entry.title)});`),
+      ...registrations.map(entry =>
+        `registerCompiledScreen(${entry.alias}, ${JSON.stringify(entry.title)}, ${JSON.stringify(entry.snapshot)});`),
       '',
     ].join('\n'),
     'utf-8',
