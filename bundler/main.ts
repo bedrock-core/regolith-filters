@@ -4,6 +4,24 @@ import { parseTsconfig, type TsConfigJson } from "get-tsconfig";
 import json5 from "json5";
 import path from "path";
 
+import { desugarJsxConditionals } from "../ui-compile/lib/sugar.ts";
+
+/**
+ * Rewrites React's conditional-rendering idioms in screen modules into carried
+ * `visible` props — the same desugaring the ui-compile filter applies when it
+ * bakes a screen's shape, so the tree the runtime walks matches it. See
+ * ui-compile/lib/sugar.ts.
+ */
+const jsxSugarPlugin: Plugin = {
+  name: "jsx-conditional-sugar",
+  setup(pluginBuild: PluginBuild) {
+    pluginBuild.onLoad({ filter: /\.screen\.tsx$/ }, (args) => ({
+      contents: desugarJsxConditionals(fs.readFileSync(args.path, "utf-8"), args.path),
+      loader: "tsx",
+    }));
+  },
+};
+
 /** A tsconfig `paths` alias redirected into the Regolith temp workspace. */
 interface AliasTarget {
   resolvedBase: string;
@@ -323,7 +341,7 @@ async function main(): Promise<void> {
     }
 
     const tsconfigPaths = tsconfig.compilerOptions?.paths ?? {};
-    await build({ ...buildOptions, plugins: [tsconfigPathsPlugin(tsconfigPaths), json5Plugin()] }).catch((err: unknown) => {
+    await build({ ...buildOptions, plugins: [tsconfigPathsPlugin(tsconfigPaths), json5Plugin(), jsxSugarPlugin] }).catch((err: unknown) => {
       console.error("❌ Build error:", err instanceof Error ? err.message : err);
       process.exit(1);
     });

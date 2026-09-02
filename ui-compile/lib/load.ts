@@ -13,9 +13,22 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { build } from 'esbuild';
+import { build, type Plugin } from 'esbuild';
+
+import { desugarJsxConditionals } from './sugar.ts';
 
 const stub = path.join(import.meta.dirname, 'stubs', 'minecraft.cjs');
+
+/** Rewrites React's conditional-rendering idioms in screen modules; see sugar.ts. */
+export const jsxSugarPlugin: Plugin = {
+  name: 'jsx-conditional-sugar',
+  setup(pluginBuild) {
+    pluginBuild.onLoad({ filter: /\.screen\.tsx$/ }, args => ({
+      contents: desugarJsxConditionals(fs.readFileSync(args.path, 'utf-8'), args.path),
+      loader: 'tsx',
+    }));
+  },
+};
 
 import type { Document } from './hooks.ts';
 
@@ -174,6 +187,9 @@ export async function loadScreen(
       '@minecraft/server': stub,
       '@minecraft/server-ui': stub,
     },
+    // The same desugaring the bundler applies to the shipped scripts, so the
+    // shape this compile bakes and the tree the runtime walks agree.
+    plugins: [jsxSugarPlugin],
     write: false,
     logLevel: 'silent',
   });
