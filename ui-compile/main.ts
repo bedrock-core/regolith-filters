@@ -32,7 +32,7 @@ import path from 'node:path';
 import type { Document } from './lib/hooks.ts';
 import { mergeHook, parseJsonc } from './lib/hooks.ts';
 import type { CompiledFormScreen, CompiledScreen, Hook, ScreenBundle } from './lib/load.ts';
-import { loadScreen } from './lib/load.ts';
+import { listScreenExports, loadScreen } from './lib/load.ts';
 import { registerUiDefs } from './lib/uiDefs.ts';
 
 const projectRoot = process.env['ROOT_DIR'];
@@ -100,6 +100,13 @@ interface Settings {
    * shipped pack.
    */
   stamp?: boolean;
+  /**
+   * Modules whose default export is a record of screens to compile besides
+   * the addon's own `*.screen.tsx` — a library's generic screens, such as
+   * `@bedrock-core/config/compiled`. Each export key names the screen; the
+   * bundle resolves the specifier the way the addon's scripts would.
+   */
+  screens?: string[];
 }
 
 const settings = JSON.parse(process.argv[2] ?? '{}') as Settings;
@@ -138,20 +145,51 @@ function findFiles(dir: string, suffix: string): string[] {
 // Sorted so the build is the same from one machine to the next.
 const screenPaths = findFiles(path.resolve(SOURCE_DIR), SCREEN_SUFFIX).sort();
 
-if (screenPaths.length === 0) {
-  console.log(`ℹ️  ui-compile: no *${SCREEN_SUFFIX} under ${SOURCE_DIR}, nothing to do`);
+const rel = (file: string): string => path.isAbsolute(file) ? path.relative(projectRoot, file).replaceAll('\\', '/') : file;
+
+/** One screen to compile: the addon's own file, or one export of a library's screens module. */
+interface ScreenEntry {
+  /** A file under BP/scripts, or the bare specifier of a screens module. */
+  screenPath: string;
+  name: string;
+  /** Set for a library screen: the key it sits under in the module's default export. */
+  exportName?: string;
+}
+
+const entries: ScreenEntry[] = screenPaths.map(screenPath => ({ screenPath, name: path.basename(screenPath, SCREEN_SUFFIX) }));
+
+// A library's generic screens, compiled into THIS addon's pack the way its
+// own files are: the runtime that renders them is the one this addon ships.
+for (const specifier of settings.screens ?? []) {
+  const exported = await listScreenExports(specifier, path.join(projectRoot, '.regolith', 'cache', 'ui-compile'))
+    .catch((error: unknown) => {
+      console.error(`❌ ui-compile: cannot list the screens of ${specifier}: ${String(error)}`);
+
+      return process.exit(1);
+    });
+
+  if (exported.length === 0) {
+    console.error(`❌ ui-compile: ${specifier} default-exports no screens`);
+    process.exit(1);
+  }
+
+  for (const exportName of exported) {
+    entries.push({ screenPath: specifier, name: exportName, exportName });
+  }
+}
+
+if (entries.length === 0) {
+  console.log(`ℹ️  ui-compile: no *${SCREEN_SUFFIX} under ${SOURCE_DIR} and no screens setting, nothing to do`);
   process.exit(0);
 }
 
-const rel = (file: string): string => path.relative(projectRoot, file).replaceAll('\\', '/');
-
 // The name is the JSON UI namespace and the output file, so it has to be unique
 // across the addon whatever directory a screen sits in.
-const names = screenPaths.map(screenPath => path.basename(screenPath, SCREEN_SUFFIX));
+const names = entries.map(entry => entry.name);
 const duplicate = names.find((name, index) => names.indexOf(name) !== index);
 
 if (duplicate !== undefined) {
-  console.error(`❌ ui-compile: two screens are named "${duplicate}"; a screen's file name has to be unique`);
+  console.error(`❌ ui-compile: two screens are named "${duplicate}"; a screen's name has to be unique`);
   process.exit(1);
 }
 
@@ -256,15 +294,14 @@ const compiled = [];
 const forms = [];
 
 /** Screen name -> the source path it came from, for the generated registration module. */
-const formSources = new Map();
+const formSources = new Map<string, string | { specifier: string; exportName: string }>();
 
 // Every bundle carries the project's own library, and its exports are the same
 // from one screen to the next; the last one loaded speaks for all of them.
 /** @type {import('./lib/load.js').ScreenBundle} */
 let library;
 
-for (const [index, screenPath] of screenPaths.entries()) {
-  const name = names[index] ?? path.basename(screenPath, SCREEN_SUFFIX);
+for (const { screenPath, name, exportName } of entries) {
 
   // `.catch` rather than try/catch, so the result stays a value.
   //
@@ -280,6 +317,7 @@ for (const [index, screenPath] of screenPaths.entries()) {
     cacheDir,
     jsxImportSource: JSX_IMPORT_SOURCE,
     i18nBundle,
+    ...exportName === undefined ? {} : { exportName },
   }).catch((error: unknown) => fail(rel(screenPath), error));
 
   library = bundle;
@@ -312,7 +350,7 @@ for (const [index, screenPath] of screenPaths.entries()) {
     const form = screen as CompiledFormScreen;
 
     forms.push(form);
-    formSources.set(name, screenPath);
+    formSources.set(name, exportName === undefined ? screenPath : { specifier: screenPath, exportName });
 
     console.log(`✅ ui-compile: ${name} — form, ${form.entries.length} entry(s)`);
   }
@@ -565,12 +603,19 @@ if (forms.length > 0) {
     return relative.startsWith('.') ? relative : `./${relative}`;
   };
 
-  const registrations = forms.map((screen, index) => ({
-    alias: `Screen${index}`,
-    source: specifierFor(formSources.get(screen.name)),
-    title: screen.title,
-    snapshot: screen.snapshot,
-  }));
+  const registrations = forms.map((screen, index) => {
+    const from = formSources.get(screen.name);
+    const library = typeof from === 'object';
+
+    return {
+      alias: `Screen${index}`,
+      source: library ? from.specifier : specifierFor(from ?? ''),
+      // A library screen is a member of its module's default export.
+      member: library ? from.exportName : undefined,
+      title: screen.title,
+      snapshot: screen.snapshot,
+    };
+  });
 
   fs.mkdirSync(generatedDir, { recursive: true });
   fs.writeFileSync(
@@ -593,7 +638,7 @@ if (forms.length > 0) {
       ...registrations.map(entry => `import ${entry.alias} from '${entry.source}';`),
       '',
       ...registrations.map(entry =>
-        `registerCompiledScreen(${entry.alias}, ${JSON.stringify(entry.title)}, ${JSON.stringify(entry.snapshot)});`),
+        `registerCompiledScreen(${entry.alias}${entry.member === undefined ? '' : `[${JSON.stringify(entry.member)}]`}, ${JSON.stringify(entry.title)}, ${JSON.stringify(entry.snapshot)});`),
       '',
     ].join('\n'),
     'utf-8',

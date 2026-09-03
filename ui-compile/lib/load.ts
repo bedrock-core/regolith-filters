@@ -110,7 +110,7 @@ export interface ScreenBundle {
  * @param name       the screen's name
  * @param namespace  the addon namespace the screen is emitted under
  */
-const entrySource = (screenPath: string, name: string, namespace: string, i18nBundle: string | undefined): string => `
+const entrySource = (screenPath: string, name: string, namespace: string, i18nBundle: string | undefined, exportName: string | undefined): string => `
 ${i18nBundle === undefined ? '' : `
 // The addon's translations, registered as the build's default resolver the
 // way the addon's own createI18n() call registers them at runtime: a
@@ -131,10 +131,16 @@ import {
   LAYOUT_PROPERTY, MAX_LAYOUT, VOCABULARY_MAX, VOCABULARY_MIN,
 } from '@bedrock-core/ui-runtime/compile';
 
-const Screen = screenModule.default;
+// A screen module default-exports its component; a library's screens module
+// default-exports a record of them, and one is picked by name.
+const Screen = ${exportName === undefined
+    ? 'screenModule.default'
+    : `(screenModule.default ?? {})[${JSON.stringify(exportName)}]`};
 
 if (typeof Screen !== 'function') {
-  throw new Error('a screen module must default-export a component');
+  throw new Error(${JSON.stringify(exportName === undefined
+    ? 'a screen module must default-export a component'
+    : `the screens module must default-export a record with a component under "${exportName}"`)});
 }
 
 // Which screen the author asked for is the root they wrote: \`<Container>\` is a
@@ -177,16 +183,25 @@ export interface LoadScreenOptions {
   jsxImportSource: string;
   /** Absolute path of the addon's runtime i18n bundle, when the i18n filter wrote one. */
   i18nBundle?: string;
+  /**
+   * The key the screen sits under when `screenPath` is a library's screens
+   * module (a bare specifier whose default export is a record of screens).
+   */
+  exportName?: string;
 }
 
+/** Where a module specifier resolves from: a file from its folder, a bare specifier from the workspace. */
+const resolveDirOf = (screenPath: string): string =>
+  path.isAbsolute(screenPath) ? path.dirname(screenPath) : process.cwd();
+
 export async function loadScreen(
-  { screenPath, name, namespace, cacheDir, jsxImportSource, i18nBundle }: LoadScreenOptions,
+  { screenPath, name, namespace, cacheDir, jsxImportSource, i18nBundle, exportName }: LoadScreenOptions,
 ): Promise<ScreenBundle> {
   const result = await build({
     stdin: {
-      contents: entrySource(screenPath, name, namespace, i18nBundle),
-      resolveDir: path.dirname(screenPath),
-      sourcefile: `${path.basename(screenPath)}.entry.tsx`,
+      contents: entrySource(screenPath, name, namespace, i18nBundle, exportName),
+      resolveDir: resolveDirOf(screenPath),
+      sourcefile: `${path.basename(screenPath)}.${name}.entry.tsx`,
       loader: 'tsx',
     },
     bundle: true,
@@ -222,4 +237,44 @@ export async function loadScreen(
   const mod = (await import(pathToFileURL(file).href)) as { default: ScreenBundle };
 
   return mod.default;
+}
+
+/**
+ * The screen names a library's screens module exports: the keys of its
+ * default export, read by bundling the module once with nothing else.
+ */
+export async function listScreenExports(specifier: string, cacheDir: string): Promise<string[]> {
+  const result = await build({
+    stdin: {
+      contents: `import * as mod from ${JSON.stringify(specifier)};\nexport default Object.keys(mod.default ?? {});\n`,
+      resolveDir: process.cwd(),
+      sourcefile: 'screens.list.entry.ts',
+      loader: 'ts',
+    },
+    bundle: true,
+    format: 'esm',
+    platform: 'node',
+    alias: {
+      '@minecraft/server': stub,
+      '@minecraft/server-ui': stub,
+    },
+    write: false,
+    logLevel: 'silent',
+  });
+
+  const [output] = result.outputFiles;
+
+  if (output === undefined) {
+    throw new Error(`esbuild produced no output listing ${specifier}`);
+  }
+
+  const hash = crypto.createHash('sha1').update(specifier).update(output.text).digest('hex').slice(0, 16);
+  const file = path.join(cacheDir, `${hash}.list.mjs`);
+
+  fs.mkdirSync(cacheDir, { recursive: true });
+  fs.writeFileSync(file, output.text, 'utf-8');
+
+  const mod = (await import(pathToFileURL(file).href)) as { default: unknown };
+
+  return Array.isArray(mod.default) ? mod.default.filter((key): key is string => typeof key === 'string').sort() : [];
 }

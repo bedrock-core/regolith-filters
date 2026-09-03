@@ -8,6 +8,12 @@
 			"type": "string",
 			"pattern": "^[a-z0-9_]+$",
 			"description": "The addon's namespace. It prefixes every screen's JSON UI namespace as <namespace>_<name>, so an addon's UI carries its own name and never collides with another addon's. Left unset, it is read from the creator/pack in core.register(), the way the other filters resolve it."
+		},
+		"screens": {
+			"type": "array",
+			"items": { "type": "string" },
+			"default": [],
+			"description": "Modules whose default export is a record of screens to compile besides the addon's own *.screen.tsx files — a library's generic screens, e.g. \"@bedrock-core/config/compiled\". Each export key names the screen."
 		}
 	}
 }
