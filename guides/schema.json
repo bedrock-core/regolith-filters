@@ -45,6 +45,26 @@
       "type": "boolean",
       "default": false,
       "description": "Fail the build (instead of warning) when a locale's keys drift from the default locale."
+    },
+    "compileScreens": {
+      "type": "boolean",
+      "default": true,
+      "description": "Write one generated *.screen.tsx per page (plus the home index) under screensDir, for the ui-compile filter to bake into the pack. Off, the guide renders only through createGuide at runtime."
+    },
+    "screensDir": {
+      "type": "string",
+      "default": "BP/scripts/guides",
+      "description": "Where the generated screen modules go, relative to the Regolith temp directory. Must sit under the scripts folder the ui-compile filter scans."
+    },
+    "screenTitle": {
+      "type": "string",
+      "default": "Guide",
+      "description": "Header title baked into every compiled guide screen (raw text, colorable)."
+    },
+    "componentsModule": {
+      "type": "string",
+      "default": "",
+      "description": "Module whose default export is the registry of components MDX `cmp` blocks may use (a GuideComponents record), relative to the Regolith temp directory, e.g. BP/scripts/UI/guideComponents.ts. Empty, a cmp block renders the unsupported-content placeholder on compiled screens."
     }
   }
 }

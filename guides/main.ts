@@ -22,6 +22,7 @@ import { upsertGeneratedSection } from './lib/lang.ts';
 import { keyPrefix, sanitizeSegment } from './lib/keys.ts';
 import { reconcileLocale, summarizeKeysByPage } from './lib/locales.ts';
 import { readPngSize } from './lib/png.ts';
+import { guideScreenModules } from './lib/screens.ts';
 
 // ---------------------------------------------------------------------------
 // Environment
@@ -52,6 +53,10 @@ interface Settings {
   manifestPath: string;
   maxCodeLineBytes: number;
   strictLocales: boolean;
+  compileScreens: boolean;
+  screensDir: string;
+  screenTitle: string;
+  componentsModule: string;
 }
 
 const defaults: Settings = {
@@ -63,6 +68,10 @@ const defaults: Settings = {
   manifestPath: 'data/guides/guides.generated.json',
   maxCodeLineBytes: 60,
   strictLocales: false,
+  compileScreens: true,
+  screensDir: 'BP/scripts/guides',
+  screenTitle: 'Guide',
+  componentsModule: '',
 };
 
 const argParsed: Partial<Settings> = process.argv[2] ? JSON.parse(process.argv[2]) : {};
@@ -294,6 +303,27 @@ function main(): void {
 
   for (const [locale, entries] of localeLang) writeLangSection(locale, entries);
   updateLanguagesJson(locales);
+
+  // One screen module per page plus the home index, for the ui-compile filter
+  // to bake and the bundler to ship — a guide page is a screen of its own.
+  if (settings.compileScreens) {
+    const modules = guideScreenModules({
+      pageIds: Object.keys(manifest.pages),
+      screensDir: settings.screensDir,
+      manifestPath: settings.manifestPath,
+      title: settings.screenTitle,
+      ...settings.componentsModule === '' ? {} : { components: settings.componentsModule },
+    });
+
+    for (const module of modules) {
+      const file = path.join(cwd, module.file);
+
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, module.source, 'utf-8');
+    }
+
+    console.log(`✅ ${settings.screensDir}/ — ${modules.length} screen modules (home + ${modules.length - 1} pages)`);
+  }
 
   if (warningCount > 0) console.log(`⚠️  finished with ${warningCount} warning(s)`);
 }
