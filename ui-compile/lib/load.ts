@@ -110,7 +110,17 @@ export interface ScreenBundle {
  * @param name       the screen's name
  * @param namespace  the addon namespace the screen is emitted under
  */
-const entrySource = (screenPath: string, name: string, namespace: string): string => `
+const entrySource = (screenPath: string, name: string, namespace: string, i18nBundle: string | undefined): string => `
+${i18nBundle === undefined ? '' : `
+// The addon's translations, registered as the build's default resolver the
+// way the addon's own createI18n() call registers them at runtime: a
+// localized <Text> is detected AND MEASURED through it, so a paragraph reserves
+// the height of its default-locale string instead of the height of its key.
+import i18nBundle from ${JSON.stringify(i18nBundle)};
+import { createI18n } from '@bedrock-core/i18n';
+
+createI18n(i18nBundle);
+`}
 // Namespace import, not a named one: esbuild fails the build outright on a
 // named import a module does not export, and a missing default deserves the
 // message below instead.
@@ -165,14 +175,16 @@ export interface LoadScreenOptions {
   cacheDir: string;
   /** `jsxImportSource` for the screen's JSX. */
   jsxImportSource: string;
+  /** Absolute path of the addon's runtime i18n bundle, when the i18n filter wrote one. */
+  i18nBundle?: string;
 }
 
 export async function loadScreen(
-  { screenPath, name, namespace, cacheDir, jsxImportSource }: LoadScreenOptions,
+  { screenPath, name, namespace, cacheDir, jsxImportSource, i18nBundle }: LoadScreenOptions,
 ): Promise<ScreenBundle> {
   const result = await build({
     stdin: {
-      contents: entrySource(screenPath, name, namespace),
+      contents: entrySource(screenPath, name, namespace, i18nBundle),
       resolveDir: path.dirname(screenPath),
       sourcefile: `${path.basename(screenPath)}.entry.tsx`,
       loader: 'tsx',

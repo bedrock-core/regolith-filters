@@ -103,6 +103,11 @@ const settings = JSON.parse(process.argv[2] ?? '{}') as Settings;
 
 const cacheDir = path.join(projectRoot, '.regolith', 'cache', 'ui-compile');
 
+// What the i18n filter wrote, when it ran before this one: loaded into every
+// screen's build so localized text is measured as its real string.
+const I18N_BUNDLE = 'data/i18n/i18n.generated.json';
+const i18nBundle = fs.existsSync(I18N_BUNDLE) ? path.resolve(I18N_BUNDLE) : undefined;
+
 // ---------------------------------------------------------------------------
 // Discovery
 // ---------------------------------------------------------------------------
@@ -267,6 +272,7 @@ for (const [index, screenPath] of screenPaths.entries()) {
     namespace,
     cacheDir,
     jsxImportSource: JSX_IMPORT_SOURCE,
+    i18nBundle,
   }).catch((error: unknown) => fail(rel(screenPath), error));
 
   library = bundle;
