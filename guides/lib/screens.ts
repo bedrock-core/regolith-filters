@@ -35,6 +35,9 @@ export interface GuideScreensInput {
 /** The home index's screen name; no page may fold to it. */
 export const HOME_SCREEN = 'guide_home';
 
+/** The index with a back button — the screen a host that opened the guide shows in place of the index. */
+export const HOME_BACK_SCREEN = 'guide_home_back';
+
 /** `getting-started/intro` → `guide_getting_started_intro`. */
 export const guideScreenName = (pageId: string): string =>
   `guide_${pageId.toLowerCase().replace(/[^a-z0-9_]/g, '_')}`;
@@ -56,7 +59,7 @@ export function guideScreenModules({ pageIds, screensDir, manifestPath, title, c
   const registry = components === undefined ? undefined : specifierFrom(screensDir, components.replace(/\.tsx?$/, ''));
   const registryImport = registry === undefined ? '' : `import components from ${JSON.stringify(registry)};\n`;
   const pageOptions = `{ title: ${JSON.stringify(title)}${registry === undefined ? '' : ', components'} }`;
-  const owners = new Map<string, string>([[HOME_SCREEN, '(the home index)']]);
+  const owners = new Map<string, string>([[HOME_SCREEN, '(the home index)'], [HOME_BACK_SCREEN, '(the home index with a back button)']]);
   const modules: GuideScreenModule[] = [{
     file: toPosix(path.join(screensDir, `${HOME_SCREEN}.screen.tsx`)),
     source: `${HEADER}import manifest from ${JSON.stringify(specifier)};\n`
@@ -81,6 +84,16 @@ export function guideScreenModules({ pageIds, screensDir, manifestPath, title, c
         + `export default guidePageScreen(manifest, ${JSON.stringify(pageId)}, ${pageOptions});\n`,
     });
   }
+
+  // Last, after the pages: the index again, with a back button that leaves
+  // the guide — a screen's shape is fixed, so the index a host opens and
+  // returns from is a second screen rather than a state of the first.
+  modules.push({
+    file: toPosix(path.join(screensDir, `${HOME_BACK_SCREEN}.screen.tsx`)),
+    source: `${HEADER}import manifest from ${JSON.stringify(specifier)};\n`
+      + 'import { guideHomeBackScreen } from \'@bedrock-core/guides\';\n\n'
+      + `export default guideHomeBackScreen(manifest, { title: ${JSON.stringify(title)} });\n`,
+  });
 
   return modules;
 }

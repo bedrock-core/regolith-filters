@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { guideScreenModules, guideScreenName, HOME_SCREEN } from '../lib/screens.ts';
+import { guideScreenModules, guideScreenName, HOME_BACK_SCREEN, HOME_SCREEN } from '../lib/screens.ts';
 
 const input = {
   pageIds: ['intro', 'getting-started/installation'],
@@ -22,6 +22,7 @@ describe('guideScreenModules', () => {
       `BP/scripts/guides/${HOME_SCREEN}.screen.tsx`,
       'BP/scripts/guides/guide_getting_started_installation.screen.tsx',
       'BP/scripts/guides/guide_intro.screen.tsx',
+      `BP/scripts/guides/${HOME_BACK_SCREEN}.screen.tsx`,
     ]);
   });
 
