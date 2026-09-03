@@ -17,12 +17,17 @@ export const META_BRANCH = 'meta';
 export function parseLang(content: string): Record<string, string> {
   const map: Record<string, string> = {};
   for (const rawLine of content.split('\n')) {
-    const line = rawLine.trimEnd();
-    if (!line || line.startsWith('#')) continue;
+    // Only the line ending goes: a value's trailing space is significant. A
+    // guide paragraph is split into runs at its links, so "Back to " ends in
+    // the space that separates it from the link; the client draws that space
+    // and a build that measured the trimmed value boxed the label one space
+    // too narrow, and the client ellipsised it.
+    const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine;
+    if (!line.trim() || line.trimStart().startsWith('#')) continue;
     const eqIdx = line.indexOf('=');
     if (eqIdx === -1) continue;
     const key = line.slice(0, eqIdx).trim();
-    const value = line.slice(eqIdx + 1); // preserve leading spaces in value
+    const value = line.slice(eqIdx + 1);
     if (key) map[key] = value;
   }
   return map;
