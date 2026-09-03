@@ -10,9 +10,12 @@
 // compiler executes it to bake the shape, the bundler ships it so the runtime
 // walks an identical tree.
 //
-//   {cond && <X/>}          →  <X visible={cond}/>
-//   {cond ? <A/> : <B/>}    →  <A visible={cond}/><B visible={!(cond)}/>
-//   {cond ? <A/> : null}    →  <A visible={cond}/>
+//   {cond && <X/>}          →  <X visible={cond} liveVisible={true}/>
+//   {cond ? <A/> : <B/>}    →  <A visible={cond} liveVisible/><B visible={!(cond)} liveVisible/>
+//   {cond ? <A/> : null}    →  <A visible={cond} liveVisible/>
+//
+// `liveVisible` tells the build to CARRY the visibility whether or not its
+// liveness probe happens to flip it: a condition an author wrote is dynamic.
 //
 // An element that already carries `visible` keeps it, joined with `&&`. Only
 // JSX children whose branches are single elements are rewritten — a string,
@@ -62,7 +65,7 @@ export const desugarJsxConditionals = (source: string, fileName = 'screen.tsx'):
     if (existing === undefined) {
       const tag = ts.isJsxElement(element) ? element.openingElement.tagName : element.tagName;
 
-      edits.push({ start: tag.end, end: tag.end, text: ` visible={${cond}}` });
+      edits.push({ start: tag.end, end: tag.end, text: ` visible={${cond}} liveVisible={true}` });
       return;
     }
 
@@ -72,7 +75,7 @@ export const desugarJsxConditionals = (source: string, fileName = 'screen.tsx'):
       : existing.initializer?.getText(file);
     const merged = value === undefined ? cond : `(${value}) && (${cond})`;
 
-    edits.push({ start: existing.getStart(file), end: existing.end, text: `visible={${merged}}` });
+    edits.push({ start: existing.getStart(file), end: existing.end, text: `visible={${merged}} liveVisible={true}` });
   };
 
   const rewrite = (container: ts.JsxExpression): void => {
