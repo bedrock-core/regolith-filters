@@ -57,6 +57,7 @@ export interface CompiledFormScreen {
   namespace: string;
   /** What the runtime shows the form with, and what the mount gates on. */
   title: string;
+  marker?: string;
   document: Document;
   /** Every entry the runtime emits, in order. The nth is `response.selection` n. */
   entries: readonly unknown[];
@@ -188,6 +189,12 @@ export interface LoadScreenOptions {
    * module (a bare specifier whose default export is a record of screens).
    */
   exportName?: string;
+  /**
+   * Bare specifiers resolved to files of this build: the generated bundles a
+   * screen's module may import through the project's aliases, which point at
+   * the project while the bundles this build wrote live in the workspace.
+   */
+  aliases?: Record<string, string>;
 }
 
 /** Where a module specifier resolves from: a file from its folder, a bare specifier from the workspace. */
@@ -195,7 +202,7 @@ const resolveDirOf = (screenPath: string): string =>
   path.isAbsolute(screenPath) ? path.dirname(screenPath) : process.cwd();
 
 export async function loadScreen(
-  { screenPath, name, namespace, cacheDir, jsxImportSource, i18nBundle, exportName }: LoadScreenOptions,
+  { screenPath, name, namespace, cacheDir, jsxImportSource, i18nBundle, exportName, aliases = {} }: LoadScreenOptions,
 ): Promise<ScreenBundle> {
   const result = await build({
     stdin: {
@@ -213,6 +220,7 @@ export async function loadScreen(
     alias: {
       '@minecraft/server': stub,
       '@minecraft/server-ui': stub,
+      ...aliases,
     },
     // The same desugaring the bundler applies to the shipped scripts, so the
     // shape this compile bakes and the tree the runtime walks agree.

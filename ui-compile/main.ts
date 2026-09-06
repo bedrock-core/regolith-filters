@@ -118,6 +118,20 @@ const cacheDir = path.join(projectRoot, '.regolith', 'cache', 'ui-compile');
 const I18N_BUNDLE = 'data/i18n/i18n.generated.json';
 const i18nBundle = fs.existsSync(I18N_BUNDLE) ? path.resolve(I18N_BUNDLE) : undefined;
 
+// The generated bundles a screen's module may import the way the addon's own
+// code does — `@bedrock-core/generated/*` — resolved to what THIS build wrote:
+// the project's tsconfig aliases point at the project, and the bundles live
+// in the workspace.
+const GENERATED_BUNDLES: Record<string, string> = {
+  '@bedrock-core/generated/i18n': I18N_BUNDLE,
+  '@bedrock-core/generated/guides': 'data/guides/guides.generated.json',
+};
+const generatedAliases = Object.fromEntries(
+  Object.entries(GENERATED_BUNDLES)
+    .filter(([, file]) => fs.existsSync(file))
+    .map(([specifier, file]) => [specifier, path.resolve(file)]),
+);
+
 // ---------------------------------------------------------------------------
 // Discovery
 // ---------------------------------------------------------------------------
@@ -317,6 +331,7 @@ for (const { screenPath, name, exportName } of entries) {
     cacheDir,
     jsxImportSource: JSX_IMPORT_SOURCE,
     i18nBundle,
+    aliases: generatedAliases,
     ...exportName === undefined ? {} : { exportName },
   }).catch((error: unknown) => fail(rel(screenPath), error));
 
