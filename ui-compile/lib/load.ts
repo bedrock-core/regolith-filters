@@ -204,18 +204,72 @@ const resolveDirOf = (screenPath: string): string =>
 export async function loadScreen(
   { screenPath, name, namespace, cacheDir, jsxImportSource, i18nBundle, exportName, aliases = {} }: LoadScreenOptions,
 ): Promise<ScreenBundle> {
+  return evaluateEntry<ScreenBundle>({
+    contents: entrySource(screenPath, name, namespace, i18nBundle, exportName),
+    resolveDir: resolveDirOf(screenPath),
+    sourcefile: `${path.basename(screenPath)}.${name}.entry.tsx`,
+    loader: 'tsx',
+    cacheDir,
+    jsxImportSource,
+    aliases,
+    key: screenPath,
+  });
+}
+
+/**
+ * The screen names a library's screens module exports: the keys of its
+ * default export, read by bundling the module once with nothing else.
+ */
+export async function listScreenExports(specifier: string, cacheDir: string): Promise<string[]> {
+  const exported = await evaluateEntry<unknown>({
+    contents: `import * as mod from ${JSON.stringify(specifier)};
+export default Object.keys(mod.default ?? {});
+`,
+    resolveDir: process.cwd(),
+    sourcefile: 'screens.list.entry.ts',
+    loader: 'ts',
+    cacheDir,
+    key: specifier,
+  });
+
+  return Array.isArray(exported) ? exported.filter((key): key is string => typeof key === 'string').sort() : [];
+}
+
+export interface EvaluateOptions {
+  /** The entry module's source. */
+  contents: string;
+  /** Where the entry's imports resolve from: a file's folder, or the workspace for bare specifiers. */
+  resolveDir: string;
+  sourcefile: string;
+  loader: 'ts' | 'tsx';
+  /** Where the bundled intermediate lands before it is imported. */
+  cacheDir: string;
+  /** `jsxImportSource` for JSX the entry itself contains; modules with a pragma need none. */
+  jsxImportSource?: string;
+  /** Bare specifiers resolved to files of this build; see {@link LoadScreenOptions.aliases}. */
+  aliases?: Record<string, string>;
+  /** What tells two entries with the same source apart in the cache. */
+  key: string;
+}
+
+/**
+ * Bundles an entry against the project's own node_modules and evaluates it,
+ * handing back its default export.
+ *
+ * Every build-time use of the library goes through here — compiling a screen,
+ * listing a screens module, reducing compiled screens to references — so all
+ * of them see one library: the one the project ships, with the game modules
+ * stubbed and the same desugaring the shipped scripts get.
+ */
+export async function evaluateEntry<T>(
+  { contents, resolveDir, sourcefile, loader, cacheDir, jsxImportSource, aliases = {}, key }: EvaluateOptions,
+): Promise<T> {
   const result = await build({
-    stdin: {
-      contents: entrySource(screenPath, name, namespace, i18nBundle, exportName),
-      resolveDir: resolveDirOf(screenPath),
-      sourcefile: `${path.basename(screenPath)}.${name}.entry.tsx`,
-      loader: 'tsx',
-    },
+    stdin: { contents, resolveDir, sourcefile, loader },
     bundle: true,
     format: 'esm',
     platform: 'node',
-    jsx: 'automatic',
-    jsxImportSource,
+    ...jsxImportSource === undefined ? {} : { jsx: 'automatic', jsxImportSource },
     // The game modules only have to exist; see the stub for why.
     alias: {
       '@minecraft/server': stub,
@@ -223,7 +277,7 @@ export async function loadScreen(
       ...aliases,
     },
     // The same desugaring the bundler applies to the shipped scripts, so the
-    // shape this compile bakes and the tree the runtime walks agree.
+    // shape a compile bakes and the tree the runtime walks agree.
     plugins: [jsxSugarPlugin],
     write: false,
     logLevel: 'silent',
@@ -232,57 +286,17 @@ export async function loadScreen(
   const [output] = result.outputFiles;
 
   if (output === undefined) {
-    throw new Error(`esbuild produced no output for ${screenPath}`);
+    throw new Error(`esbuild produced no output for ${sourcefile}`);
   }
 
   const code = output.text;
-  const hash = crypto.createHash('sha1').update(screenPath).update(code).digest('hex').slice(0, 16);
+  const hash = crypto.createHash('sha1').update(key).update(code).digest('hex').slice(0, 16);
   const file = path.join(cacheDir, `${hash}.mjs`);
 
   fs.mkdirSync(cacheDir, { recursive: true });
   fs.writeFileSync(file, code, 'utf-8');
 
-  const mod = (await import(pathToFileURL(file).href)) as { default: ScreenBundle };
+  const mod = (await import(pathToFileURL(file).href)) as { default: T };
 
   return mod.default;
-}
-
-/**
- * The screen names a library's screens module exports: the keys of its
- * default export, read by bundling the module once with nothing else.
- */
-export async function listScreenExports(specifier: string, cacheDir: string): Promise<string[]> {
-  const result = await build({
-    stdin: {
-      contents: `import * as mod from ${JSON.stringify(specifier)};\nexport default Object.keys(mod.default ?? {});\n`,
-      resolveDir: process.cwd(),
-      sourcefile: 'screens.list.entry.ts',
-      loader: 'ts',
-    },
-    bundle: true,
-    format: 'esm',
-    platform: 'node',
-    alias: {
-      '@minecraft/server': stub,
-      '@minecraft/server-ui': stub,
-    },
-    write: false,
-    logLevel: 'silent',
-  });
-
-  const [output] = result.outputFiles;
-
-  if (output === undefined) {
-    throw new Error(`esbuild produced no output listing ${specifier}`);
-  }
-
-  const hash = crypto.createHash('sha1').update(specifier).update(output.text).digest('hex').slice(0, 16);
-  const file = path.join(cacheDir, `${hash}.list.mjs`);
-
-  fs.mkdirSync(cacheDir, { recursive: true });
-  fs.writeFileSync(file, output.text, 'utf-8');
-
-  const mod = (await import(pathToFileURL(file).href)) as { default: unknown };
-
-  return Array.isArray(mod.default) ? mod.default.filter((key): key is string => typeof key === 'string').sort() : [];
 }
