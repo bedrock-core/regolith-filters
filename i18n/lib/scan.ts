@@ -64,7 +64,7 @@ export function scanNamespace(sources: Source[]): { namespace: string } | { reas
     return { namespace: `${[...creators][0]}_${[...packs][0]}` };
   }
   if (creators.size === 0 || packs.size === 0) {
-    return { reason: 'no core.register({ creator, pack }) string literals found' };
+    return { reason: 'no core.register({ manifest: { creator, pack } }) string literals found' };
   }
   return {
     reason: `ambiguous register literals (creator: ${[...creators].join('/')}, pack: ${[...packs].join('/')})`,

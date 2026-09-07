@@ -407,7 +407,7 @@ async function main(): Promise<void> {
       namespace = scanned.namespace;
       console.log(`🏷️  Namespace (from core.register): ${namespace}`);
     } else {
-      report.error('namespace', `${scanned.reason} — write creator/pack as string literals in core.register(), or set the "namespace" filter setting`);
+      report.error('namespace', `${scanned.reason} — write creator/pack as string literals in the manifest passed to core.register(), or set the "namespace" filter setting`);
     }
   }
   // ── Vanilla ───────────────────────────────────────────────────────────────
