@@ -4,6 +4,9 @@
     "bundler": {
       "url": "github.com/bedrock-core/regolith-filters"
     },
+    "core": {
+      "url": "github.com/bedrock-core/regolith-filters"
+    },
     "generator": {
       "url": "github.com/bedrock-core/regolith-filters"
     },
