@@ -19,9 +19,6 @@
     "manifest": {
       "url": "github.com/bedrock-core/regolith-filters"
     },
-    "translation-keys": {
-      "url": "github.com/bedrock-core/regolith-filters"
-    },
     "ui-compile": {
       "url": "github.com/bedrock-core/regolith-filters"
     }

@@ -31,13 +31,10 @@ emits nothing and is not part of a build.
 
 ### translation-keys (removed 2026-08-16)
 
-**Reason:** superseded by [**i18n**](./i18n/README.md), which inverts the flow — nested TypeScript
-resources are the source of truth and the `.lang` files, runtime bundle and key types are all
-generated from them, with typed interpolation, plurals, library resources and vanilla keys on top.
-
-Migration path and details: [translation-keys/README.md](./translation-keys/README.md) (the i18n
-filter ships a `from-lang` tool). Pre-removal tags still resolve and install from this repository's
-history.
+**Reason:** superseded by [**i18n**](./i18n/README.md), which inverts the flow — TypeScript
+resources are the source of truth and the `.lang` files are generated from them. The i18n filter
+ships a `from-lang` converter; see
+[Migrating from translation-keys](./i18n/README.md#migrating-from-translation-keys).
 
 ### item-aux (removed 2026-06-12)
 
