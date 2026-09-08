@@ -4,54 +4,41 @@
 // order the stack supports:
 //
 //   1. manifest    — pick the profile's manifest variant before anything reads it
-//   2. guides      — guide keys must land before i18n collects them
-//   3. i18n        — .lang files and the runtime bundle
-//   4. ui-compile  — screens bake against the keys i18n emitted
-//   5. bundler     — last: it inlines the generated bundles and strips the sources
+//   2. generator   — opt-in: templates become JSON before the scripts are bundled
+//   3. guides      — guide keys must land before i18n collects them
+//   4. i18n        — .lang files and the runtime bundle
+//   5. ui-compile  — screens bake against the keys i18n emitted
+//   6. bundler     — last: it inlines the generated bundles and strips the sources
 //
-// The generator is a stage too, but not a default one: it emits schema types
-// into the project, so a project opts into it by naming it in `stages`, before
-// the bundler.
+// The order is fixed. A project that needs a step of its own between two stages
+// lists the filters one by one in `config.json` and puts its own filter where it
+// belongs.
 //
 // Every stage runs in its own Node process, exactly as Regolith runs it: same
 // cwd (the temp workspace), same ROOT_DIR, same `argv[2]` settings JSON, same
 // exit code. This filter only assembles the settings and enforces the order.
 //
 // A stage whose inputs are absent reports that it has nothing to do and the run
-// continues, so the default stack is safe for a project that uses part of it.
+// continues, so the stack is safe for a project that uses part of it.
 
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-/** Every filter of this repository the stack can run. */
+/** Every filter of this repository the stack runs, in the order it runs them. */
 const STAGES = ['manifest', 'generator', 'guides', 'i18n', 'ui-compile', 'bundler'] as const;
 
-/** What runs when the profile does not name its stages. */
-const DEFAULT_STAGES = ['manifest', 'guides', 'i18n', 'ui-compile', 'bundler'] as const;
+/**
+ * The generator writes schema types into the project, so it runs only when the
+ * profile names it. Every other stage runs unless its key is `false`.
+ */
+const OPT_IN: Stage = 'generator';
 
 type Stage = (typeof STAGES)[number];
 
-/**
- * A project's own filter, run in place among the stages — the escape hatch for
- * a step that belongs mid-stack and is not one of this repository's filters.
- */
-interface CustomStage {
-  /** Node script to run, relative to the project root, as a local filter's `script` is. */
-  script: string;
-  /** Label for the log line. Defaults to the script's file name. */
-  name?: string;
-  /** Settings for this script, merged over `shared`. */
-  settings?: Record<string, unknown>;
-}
-
-type StageSpec = Stage | CustomStage;
-
 /** Settings Regolith passes as argv[2]. */
 interface Settings {
-  /** Stages to run, in the order given. Defaults to the stack above. */
-  stages?: StageSpec[];
   /** Settings merged into every stage — where `namespace` belongs. */
   shared?: Record<string, unknown>;
   /** Per-stage settings, merged over `shared`. `false` skips the stage. */
@@ -59,9 +46,8 @@ interface Settings {
 }
 
 const filterDir = path.dirname(fileURLToPath(import.meta.url));
-const projectRoot = process.env['ROOT_DIR'];
 
-if (!projectRoot) {
+if (!process.env['ROOT_DIR']) {
   console.error('❌ ROOT_DIR environment variable not set');
   console.error('This filter must be run by Regolith');
   process.exit(1);
@@ -93,39 +79,33 @@ function readSettings(): Settings {
 const settings = readSettings();
 
 for (const key of Object.keys(settings)) {
-  if (key === 'stages' || key === 'shared' || isStage(key)) continue;
-  fail(`unknown setting "${key}"`, `expected "stages", "shared" or one of: ${STAGES.join(', ')}`);
+  if (key === 'shared' || isStage(key)) continue;
+  fail(`unknown setting "${key}"`, `expected "shared" or one of: ${STAGES.join(', ')}`);
 }
 
 const shared = settings.shared ?? {};
 
 if (!isRecord(shared)) fail('"shared" must be an object');
 
-const requested: StageSpec[] = settings.stages ?? [...DEFAULT_STAGES];
-
-if (!Array.isArray(requested)) fail('"stages" must be an array');
-
-for (const spec of requested) {
-  if (isStage(spec)) continue;
-  if (isRecord(spec) && typeof spec['script'] === 'string') continue;
-  fail(
-    `"stages" entry ${JSON.stringify(spec)} is not a stage`,
-    `expected one of ${STAGES.join(', ')}, or an object with a "script" path`,
-  );
-}
-
 /** One process to run: the script and the settings it is handed. */
 interface Step {
-  label: string;
+  stage: Stage;
   script: string;
-  settings: Record<string, unknown> | null;
+  settings: Record<string, unknown>;
 }
 
-function repositoryStep(stage: Stage): Step {
+/** Builds the step for a stage, or nothing when the profile leaves it out. */
+function plan(stage: Stage): Step | null {
   const own = settings[stage];
 
-  if (own !== undefined && own !== false && !isRecord(own)) {
-    fail(`"${stage}" must be an object or false`);
+  if (own === false) return null;
+  if (own === undefined) {
+    if (stage === OPT_IN) return null;
+  } else if (own !== true && !isRecord(own)) {
+    fail(
+      `"${stage}" must be an object or false`,
+      stage === OPT_IN ? 'or true, to run it with its defaults' : undefined,
+    );
   }
 
   // Each stage's entry point sits beside this one, in its own filter folder.
@@ -138,56 +118,30 @@ function repositoryStep(stage: Stage): Step {
     );
   }
 
-  return {
-    label: stage,
-    script,
-    settings: own === false ? null : { ...shared, ...own },
-  };
+  return { stage, script, settings: { ...shared, ...(isRecord(own) ? own : {}) } };
 }
 
-function customStep(spec: CustomStage): Step {
-  if (spec.settings !== undefined && !isRecord(spec.settings)) {
-    fail(`the "settings" of ${spec.script} must be an object`);
-  }
-
-  // A local filter's script is relative to the project root; so is this one.
-  const script = path.resolve(projectRoot!, spec.script);
-
-  if (!fs.existsSync(script)) fail(`no script at ${spec.script}`, `resolved to ${script}`);
-
-  return {
-    label: spec.name ?? path.basename(spec.script),
-    script,
-    settings: { ...shared, ...spec.settings },
-  };
-}
-
-/** Runs one step, unless the profile skipped it. Returns whether it ran. */
-function runStep(step: Step): boolean {
-  if (step.settings === null) {
-    console.log(`⏭️  ${step.label} — skipped`);
-    return false;
-  }
-
+function run(step: Step): void {
   const args = Object.keys(step.settings).length > 0
     ? [step.script, JSON.stringify(step.settings)]
     : [step.script];
 
-  console.log(`▶️  ${step.label}`);
+  console.log(`▶️  ${step.stage}`);
 
   const result = spawnSync(process.execPath, args, { cwd: process.cwd(), stdio: 'inherit' });
 
-  if (result.error) fail(`could not run "${step.label}"`, result.error.message);
-  if (result.signal) fail(`"${step.label}" was killed by ${result.signal}`);
+  if (result.error) fail(`could not run "${step.stage}"`, result.error.message);
+  if (result.signal) fail(`"${step.stage}" was killed by ${result.signal}`);
   if (result.status !== 0) {
-    console.error(`❌ "${step.label}" failed`);
+    console.error(`❌ "${step.stage}" failed`);
     process.exit(result.status ?? 1);
   }
-
-  return true;
 }
 
-const steps = requested.map(spec => isStage(spec) ? repositoryStep(spec) : customStep(spec as CustomStage));
-const ran = steps.filter(runStep).map(step => step.label);
+const steps = STAGES.map(plan).filter((entry): entry is Step => entry !== null);
+
+for (const entry of steps) run(entry);
+
+const ran = steps.map(entry => entry.stage);
 
 console.log(ran.length > 0 ? `✨ Stack complete — ${ran.join(' → ')}` : '✨ Stack complete — every stage was skipped');

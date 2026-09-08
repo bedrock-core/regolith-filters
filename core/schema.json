@@ -5,42 +5,16 @@
 	"type": "object",
 	"additionalProperties": false,
 	"properties": {
-		"stages": {
-			"type": "array",
-			"description": "Stages to run, in the order given. An entry is one of this repository's filters, or an object naming a script of the project's own. Defaults to the stack the filters depend on; the generator is not part of it, because it emits schema types into the project.",
-			"default": ["manifest", "guides", "i18n", "ui-compile", "bundler"],
-			"items": {
-				"oneOf": [
-					{ "enum": ["manifest", "generator", "guides", "i18n", "ui-compile", "bundler"] },
-					{
-						"type": "object",
-						"additionalProperties": false,
-						"required": ["script"],
-						"properties": {
-							"script": {
-								"type": "string",
-								"description": "Node script to run at this point in the stack, relative to the project root — the same path a local filter definition would use."
-							},
-							"name": {
-								"type": "string",
-								"description": "Label for the log line. Defaults to the script's file name."
-							},
-							"settings": {
-								"type": "object",
-								"description": "Settings for this script, merged over `shared`."
-							}
-						}
-					}
-				]
-			}
-		},
 		"shared": {
 			"type": "object",
 			"description": "Settings merged into every stage. The addon's namespace belongs here; a stage that does not read a key ignores it.",
 			"default": {}
 		},
 		"manifest": { "$ref": "#/definitions/stage" },
-		"generator": { "$ref": "#/definitions/stage" },
+		"generator": {
+			"description": "The generator runs only when this key is present — it writes schema types into the project, so a project opts in. `true` runs it with its defaults.",
+			"oneOf": [{ "type": "object" }, { "type": "boolean" }]
+		},
 		"guides": { "$ref": "#/definitions/stage" },
 		"i18n": { "$ref": "#/definitions/stage" },
 		"ui-compile": { "$ref": "#/definitions/stage" },
