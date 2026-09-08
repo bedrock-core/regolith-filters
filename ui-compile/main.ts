@@ -43,9 +43,7 @@ if (!projectRoot) {
   process.exit(1);
 }
 
-// ---------------------------------------------------------------------------
-// Settings
-// ---------------------------------------------------------------------------
+// ─── Settings ─────────────────────────────────────────────────────────────────
 
 // Fixed addon paths: what Minecraft needs for scripts, entities, UI and texts.
 // They are not options — the pack does not work anywhere else — so they are
@@ -132,9 +130,7 @@ const generatedAliases = Object.fromEntries(
     .map(([specifier, file]) => [specifier, path.resolve(file)]),
 );
 
-// ---------------------------------------------------------------------------
-// Discovery
-// ---------------------------------------------------------------------------
+// ─── Discovery ────────────────────────────────────────────────────────────────
 
 /** Screens are marked by extension, so ordinary .tsx helpers can sit beside them. */
 const SCREEN_SUFFIX = '.screen.tsx';
@@ -207,9 +203,7 @@ if (duplicate !== undefined) {
   process.exit(1);
 }
 
-// ---------------------------------------------------------------------------
-// Namespace
-// ---------------------------------------------------------------------------
+// ─── Namespace ────────────────────────────────────────────────────────────────
 
 // The addon's namespace prefixes every screen's JSON UI namespace, so a screen
 // is `<namespace>_<name>` — the addon's own name, not the library's. Taken from
@@ -259,9 +253,7 @@ if (namespace) {
 
 console.log(`🏷️  ui-compile: namespace "${namespace}"`);
 
-// ---------------------------------------------------------------------------
-// Compile
-// ---------------------------------------------------------------------------
+// ─── Compile ──────────────────────────────────────────────────────────────────
 
 /**
  * Reads a pack JSON file that may carry comments. Vanilla tolerates JSONC in
@@ -379,9 +371,7 @@ if (library === undefined) {
 // body, and re-asserting it at each use is worse than naming it once.
 const runtime = library;
 
-// ---------------------------------------------------------------------------
-// Character table
-// ---------------------------------------------------------------------------
+// ─── Character table ──────────────────────────────────────────────────────────
 
 // A container slot publishes no text, so a string reaches a screen one
 // character at a time: each cell reads its slot's stack size and localizes a
@@ -425,9 +415,7 @@ if (compiled.some(screen => screen.hasText)) {
   console.log(`   ↳ character table → ${lines.length} entries per language`);
 }
 
-// ---------------------------------------------------------------------------
-// Router
-// ---------------------------------------------------------------------------
+// ─── Router ───────────────────────────────────────────────────────────────────
 
 // The router — one gated host per screen, under the addon's own root — is a
 // file named after the addon. The hooks are the addon's copies of vanilla's
@@ -501,9 +489,7 @@ if (routerFile !== undefined) {
   console.log(`   ↳ router → ${rel(routerFile)}`);
 }
 
-// ---------------------------------------------------------------------------
-// Compiled form screens
-// ---------------------------------------------------------------------------
+// ─── Compiled form screens ────────────────────────────────────────────────────
 
 // The same two documents a chest screen needs, for a different screen: one
 // gated host per screen under the addon's root, and one modification putting
@@ -563,10 +549,10 @@ if (forms.length > 0) {
     // does: a `modifications` entry only stacks onto a file a lower pack
     // defined when that file is vanilla's — against another pack's file the
     // engine merges the two definitions as plain objects, and `modifications`
-    // arrives as an unknown property (measured: "Unknown property
-    // [modifications]" on the mount, with the screens never mounted). The
-    // addon's router goes straight into `main_screen_content`, beside the
-    // library's containers; every screen under it gates on its own title.
+    // arrives as an unknown property: the engine reports "Unknown property
+    // [modifications]" on the mount and the screens never mount. The addon's
+    // router goes straight into `main_screen_content`, beside the library's
+    // containers; every screen under it gates on its own title.
     const serverFormFile = path.resolve(RESOURCE_PACK, SERVER_FORM_HOOK);
     const existingHook = fs.existsSync(serverFormFile) ? fs.readFileSync(serverFormFile, 'utf-8') : undefined;
     const hook: Document = {
@@ -662,9 +648,7 @@ if (forms.length > 0) {
   console.log(`   ↳ ${forms.length} compiled form screen(s) → ${GENERATED_DIR}/${GENERATED_FILE}`);
 }
 
-// ---------------------------------------------------------------------------
-// Build stamp
-// ---------------------------------------------------------------------------
+// ─── Build stamp ──────────────────────────────────────────────────────────────
 
 const stampFiles: string[] = [];
 
@@ -737,9 +721,7 @@ if (settings.stamp === true) {
   console.log(`   ↳ build stamp "${stamp}" → ${rel(stampFile)}`);
 }
 
-// ---------------------------------------------------------------------------
-// _ui_defs.json
-// ---------------------------------------------------------------------------
+// ─── _ui_defs.json ────────────────────────────────────────────────────────────
 
 // The hooks, the router and the screens are files nobody wrote until this
 // build ran; the library's static files are the render pack's own business.
@@ -758,9 +740,7 @@ if (added > 0) {
   console.log(`   ↳ registered ${added} file(s) in _ui_defs.json`);
 }
 
-// ---------------------------------------------------------------------------
-// Entities
-// ---------------------------------------------------------------------------
+// ─── Entities ─────────────────────────────────────────────────────────────────
 
 // A screen names the entity it opens from; the compiler knows how many slots
 // that needs, and the router which key picks it. Stamping both here means

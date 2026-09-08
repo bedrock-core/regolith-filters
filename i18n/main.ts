@@ -32,9 +32,7 @@ import { scanNamespace, scanVanillaUsage, walkSources } from './lib/scan.ts';
 import { checkParity, checkPlurals, checkVarParity, flattenResources, pluralBase } from './lib/tree.ts';
 import { fetchVanillaLang, vanillaDtsText, VANILLA_LANG_URL_TEMPLATE } from './lib/vanilla.ts';
 
-// ---------------------------------------------------------------------------
-// Environment
-// ---------------------------------------------------------------------------
+// ─── Environment ──────────────────────────────────────────────────────────────
 
 function requireProjectRoot(): string {
   const root = process.env['ROOT_DIR'];
@@ -48,9 +46,7 @@ function requireProjectRoot(): string {
 
 const projectRoot = requireProjectRoot();
 
-// ---------------------------------------------------------------------------
-// Settings
-// ---------------------------------------------------------------------------
+// ─── Settings ─────────────────────────────────────────────────────────────────
 
 interface Settings {
   namespace: string;
@@ -91,9 +87,7 @@ console.log('🌐 @bedrock-core/i18n');
 console.log('📂 Project root:', projectRoot);
 console.log('📂 Working directory:', cwd);
 
-// ---------------------------------------------------------------------------
-// Reporting
-// ---------------------------------------------------------------------------
+// ─── Reporting ────────────────────────────────────────────────────────────────
 
 let errorCount = 0;
 let warningCount = 0;
@@ -121,9 +115,7 @@ function summarize(list: string[], cap = 8): string {
   return list.length <= cap ? list.join(', ') : `${list.slice(0, cap).join(', ')} … +${list.length - cap} more`;
 }
 
-// ---------------------------------------------------------------------------
-// Bedrock locale codes (the set the vanilla client ships)
-// ---------------------------------------------------------------------------
+// ─── Bedrock locale codes (the set the vanilla client ships) ──────────────────
 
 const BEDROCK_LOCALES = new Set([
   'bg_BG', 'cs_CZ', 'da_DK', 'de_DE', 'el_GR', 'en_GB', 'en_US', 'es_ES', 'es_MX',
@@ -134,9 +126,7 @@ const BEDROCK_LOCALES = new Set([
 
 const LOCALE_FILE_RE = /^([a-z]{2}_[A-Z]{2})\.ts$/;
 
-// ---------------------------------------------------------------------------
-// Output helpers
-// ---------------------------------------------------------------------------
+// ─── Output helpers ───────────────────────────────────────────────────────────
 
 function writeLangSection(pack: string, locale: string, entries: Map<string, string>): void {
   const textsDir = path.join(cwd, pack, 'texts');
@@ -205,9 +195,7 @@ function projectDataPath(): string {
   return 'packs/data';
 }
 
-// ---------------------------------------------------------------------------
-// Main
-// ---------------------------------------------------------------------------
+// ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
   const srcRoot = path.join(cwd, settings.sourceDir);

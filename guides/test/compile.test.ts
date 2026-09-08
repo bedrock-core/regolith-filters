@@ -29,7 +29,7 @@ function page(
 describe('block compilation', () => {
   it('compiles headings with clamped levels and paragraph keys in document order', () => {
     const { blocks, lang } = page('# Title\n\n## Section\n\nBody text.\n\n#### Deep\n');
-    // leading h1 became the title and was removed
+    // the leading h1 is the page title, not a block
     expect(lang.get('bcg.test.page.title')).toBe('Title');
     expect(blocks).toEqual([
       { t: 'h', l: 2, k: 'bcg.test.page.b0' },

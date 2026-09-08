@@ -19,9 +19,9 @@ export function parseLang(content: string): Record<string, string> {
   for (const rawLine of content.split('\n')) {
     // Only the line ending goes: a value's trailing space is significant. A
     // guide paragraph is split into runs at its links, so "Back to " ends in
-    // the space that separates it from the link; the client draws that space
-    // and a build that measured the trimmed value boxed the label one space
-    // too narrow, and the client ellipsised it.
+    // the space that separates it from the link. The client draws that space,
+    // so measuring a trimmed value boxes the label one space too narrow and
+    // the client ellipsises it.
     const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine;
     if (!line.trim() || line.trimStart().startsWith('#')) continue;
     const eqIdx = line.indexOf('=');
