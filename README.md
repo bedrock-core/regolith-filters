@@ -27,17 +27,5 @@ emits nothing and is not part of a build.
 | [**manifest**](./manifest/README.md) | Picks the profile's manifest variant, resolves its `extends` chain into the canonical `manifest.json`, and deletes the variants so they never ship. |
 | [**ui-compile**](./ui-compile/README.md) | Compiles container screens (`BP/scripts/**/*.screen.tsx`, JSX written with `@bedrock-core/ui`) into static JSON UI, routes the vanilla chest screen to them, and sizes the entity each one opens from. Must run **after** i18n and **before** bundler. |
 
-## Removed Filters
-
-### translation-keys (removed 2026-08-16)
-
-**Reason:** superseded by [**i18n**](./i18n/README.md), which inverts the flow — TypeScript
-resources are the source of truth and the `.lang` files are generated from them. The i18n filter
-ships a `from-lang` converter; see
-[Migrating from translation-keys](./i18n/README.md#migrating-from-translation-keys).
-
-### item-aux (removed 2026-06-12)
-
-**Reason:** There is no reliable runtime API in Minecraft Bedrock to determine custom item aux IDs in worlds with multiple addons. Item ID assignment depends on pack stack order at world load time, which is non-deterministic and cannot be known at build time or recovered at runtime. The runtime calibration approach via `ItemTypes.getAll()` also proved unreliable due to hash-order non-determinism and dev-build extras drift.
-
-`ItemRenderer` still exists in `@bedrock-core/ui` but now requires you to manually supply an `ItemAuxMap` via `ItemAuxContext.Provider`. Item rendering is marked experimental. It works reliably only in single-addon worlds where aux IDs are deterministic.
+Each filter's manual — settings, checks and worked examples — lives at
+<https://bedrock-core.drav.dev/docs/filters>.
