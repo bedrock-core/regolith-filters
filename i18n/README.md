@@ -271,29 +271,3 @@ No settings are required when the `core.register` scan succeeds.
 | `vanillaLangUrlTemplate` | `string` | bedrock-samples URL | Where vanilla `.lang` is fetched from — `{locale}` is replaced |
 | `cacheMaxAgeHours` | `number` | `24` | Hours before a locale's cached vanilla `.lang` is stale |
 | `strict` | `boolean` | `true` | Fail the build on check violations instead of warning |
-
-## Migrating from translation-keys
-
-`translation-keys` was removed in this release — pre-removal tags still resolve and install, but
-nothing new ships there. The filter bundles a converter; run it from your **Regolith project
-root**, which is where it reads `config.json` to find your pack and data paths:
-
-```bash
-node .regolith/cache/filters/i18n/bin/from-lang.js
-```
-
-It takes the keys under your namespace out of `RP/texts/*.lang` and `BP/texts/*.lang` — skipping
-generated marker sections — and writes them back as `packs/data/i18n/<locale>.ts` resource
-modules with the prefix stripped off (the filter re-applies it at build time). Pass
-`--namespace <creator_pack>` when the `core.register` scan can't derive it, and `--force` to
-overwrite modules that already exist.
-
-Nothing is destroyed: your `.lang` files are left untouched and the run summarizes what moved and
-what stayed (un-namespaced keys such as `pack.name`, guide sections, other addons' keys). Then
-swap the filter in `config.json`, build once, and delete the migrated lines from `.lang` — the
-filter regenerates them, namespaced identically, inside its marker section.
-
-`pack.name` / `pack.description` are worth moving by hand: author them as `meta.name` /
-`meta.description`, delete the hand-written lines, and leave both manifest headers pointing at
-`pack.name` / `pack.description` — the filter regenerates those two as aliases. See
-[Manifest display strings](#manifest-display-strings).
