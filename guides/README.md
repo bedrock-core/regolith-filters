@@ -39,7 +39,7 @@ directories are read as locales, so the generated files never look like content.
 "profiles": {
   "default": {
     "filters": [
-      { "filter": "guides", "settings": { "namespace": "creator_pack" } },
+      { "filter": "guides" },
       { "filter": "i18n" },
       { "filter": "bundler" }
     ]
@@ -47,10 +47,10 @@ directories are read as locales, so the generated files never look like content.
 }
 ```
 
-`namespace` is **required** — the filter aborts without it. Use your addon namespace, the same
-`<creator>_<pack>` join the i18n filter derives from `core.register({ creator, pack })` and the
-server runtime's `addonNamespace()` builds at startup, so every key your pack emits sits under
-one prefix.
+No settings are required. The namespace every key sits under is read from the
+`core.register({ manifest: { creator, pack } })` call in `BP/scripts` — the same `<creator>_<pack>`
+join the i18n filter uses and the server runtime's `addonNamespace()` builds at startup. Set
+`namespace` only to override that scan.
 
 **Ordering is mandatory: `guides` → `i18n` → `bundler`.** guides writes `.lang`
 entries *before* the i18n filter carries them into its bundle's passthrough, which is how
@@ -84,7 +84,7 @@ const Guide = createGuide(guides, { title: 'My Addon' });
 
 | Setting | Default | Description |
 | --- | --- | --- |
-| `namespace` | — (**required**) | Addon namespace in generated keys: `<namespace>.guides.*` |
+| `namespace` | derived | Addon namespace in generated keys: `<namespace>.guides.*`. Read from `core.register()` in `BP/scripts`; set it only to override the scan |
 | `sourceDir` | `data/guides` | Content root; direct child *directories* are locale folders |
 | `defaultLocale` | `en_US` | Locale defining structure, keys, sidebar, and fallback values |
 | `include` / `exclude` | `**/*.md`, `**/*.mdx` / `[]` | Page selection globs per locale folder |

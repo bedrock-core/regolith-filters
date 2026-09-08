@@ -3,11 +3,10 @@
   "$id": "core-guides",
   "type": "object",
   "description": "Regolith filter that compiles MDX guide content (data/guides/<locale>/**) into a guide IR manifest plus auto-localized .lang entries.",
-  "required": ["namespace"],
   "properties": {
     "namespace": {
       "type": "string",
-      "description": "Addon namespace used in generated localization keys (<namespace>.guides.*). Use the same <creator>_<pack> join core.register() and the i18n filter use. Required."
+      "description": "Addon namespace used in generated localization keys (<namespace>.guides.*). Defaults to the <creator>_<pack> join read from the core.register() call under BP/scripts; set it only to override that scan."
     },
     "sourceDir": {
       "type": "string",

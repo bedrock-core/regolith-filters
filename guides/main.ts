@@ -20,13 +20,12 @@ import picomatch from 'picomatch';
 import { buildLocale, buildManifest, type Report } from './lib/build.ts';
 import { upsertGeneratedSection } from './lib/lang.ts';
 import { keyPrefix, sanitizeSegment } from './lib/keys.ts';
+import { scanNamespace } from './lib/namespace.ts';
 import { reconcileLocale, summarizeKeysByPage } from './lib/locales.ts';
 import { readPngSize } from './lib/png.ts';
 import { guideScreenModules } from './lib/screens.ts';
 
-// ---------------------------------------------------------------------------
-// Environment
-// ---------------------------------------------------------------------------
+// ─── Environment ──────────────────────────────────────────────────────────────
 
 function requireProjectRoot(): string {
   const root = process.env['ROOT_DIR'];
@@ -40,11 +39,10 @@ function requireProjectRoot(): string {
 
 const projectRoot = requireProjectRoot();
 
-// ---------------------------------------------------------------------------
-// Settings
-// ---------------------------------------------------------------------------
+// ─── Settings ─────────────────────────────────────────────────────────────────
 
 interface Settings {
+  /** Override for the scan; empty resolves it from `core.register()`. */
   namespace: string;
   sourceDir: string;
   defaultLocale: string;
@@ -77,23 +75,43 @@ const defaults: Settings = {
 const argParsed: Partial<Settings> = process.argv[2] ? JSON.parse(process.argv[2]) : {};
 const settings: Settings = Object.assign({}, defaults, argParsed);
 
-if (!settings.namespace || sanitizeSegment(settings.namespace).length === 0) {
-  console.error('❌ "namespace" setting is required (your addon namespace, e.g. "creator_pack" — keys become <namespace>.guides.*)');
-  process.exit(1);
+const cwd = process.cwd();
+
+// Every key this filter emits is prefixed with the addon's namespace, so it has
+// to be the same one i18n and ui-compile resolve: the `namespace` setting, or
+// the `core.register()` literals under BP/scripts.
+function resolveNamespace(): string {
+  if (settings.namespace) {
+    if (!/^[a-z0-9_]+$/.test(settings.namespace)) {
+      console.error(`❌ namespace "${settings.namespace}" must be lowercase a-z, 0-9 and _`);
+      process.exit(1);
+    }
+    console.log(`🏷️  Namespace (from settings): ${settings.namespace}`);
+    return settings.namespace;
+  }
+
+  const scanned = scanNamespace(path.join(cwd, 'BP', 'scripts'));
+
+  if ('reason' in scanned) {
+    console.error(`❌ no namespace — ${scanned.reason}`);
+    console.error('   write creator/pack as string literals in the manifest passed to core.register(), or set the "namespace" filter setting');
+    process.exit(1);
+  }
+
+  console.log(`🏷️  Namespace (from core.register): ${scanned.namespace}`);
+  return scanned.namespace;
 }
 
-const cwd = process.cwd();
+const namespace = resolveNamespace();
 const sourceRoot = path.join(cwd, settings.sourceDir);
-const prefix = keyPrefix(settings.namespace);
-const ns = sanitizeSegment(settings.namespace);
+const prefix = keyPrefix(namespace);
+const ns = sanitizeSegment(namespace);
 
 console.log('📖 @bedrock-core/guides');
 console.log('📂 Project root:', projectRoot);
 console.log('📂 Working directory:', cwd);
 
-// ---------------------------------------------------------------------------
-// Warning/error reporter
-// ---------------------------------------------------------------------------
+// ─── Warning/error reporter ───────────────────────────────────────────────────
 
 let errorCount = 0;
 let warningCount = 0;
@@ -110,9 +128,7 @@ const reporterFor = (locale: string): Report => ({
   },
 });
 
-// ---------------------------------------------------------------------------
-// Discovery
-// ---------------------------------------------------------------------------
+// ─── Discovery ────────────────────────────────────────────────────────────────
 
 /** Recursively list files under `dir` as POSIX-relative paths. */
 function walkFiles(dir: string, base = ''): string[] {
@@ -165,9 +181,7 @@ function imageSize(src: string): { w: number; h: number } | undefined {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Output helpers
-// ---------------------------------------------------------------------------
+// ─── Output helpers ───────────────────────────────────────────────────────────
 
 function writeLangSection(locale: string, entries: Map<string, string>): void {
   const textsDir = path.join(cwd, 'RP', 'texts');
@@ -197,9 +211,7 @@ function updateLanguagesJson(locales: string[]): void {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Main
-// ---------------------------------------------------------------------------
+// ─── Main ─────────────────────────────────────────────────────────────────────
 
 function main(): void {
   if (!fs.existsSync(sourceRoot)) {
