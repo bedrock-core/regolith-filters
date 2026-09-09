@@ -4,13 +4,15 @@ A Regolith filter that compiles **screens written in JSX** into static JSON UI, 
 everything the runtime half of [`@bedrock-core/ui`](https://github.com/bedrock-core/ui) needs to
 drive them.
 
-Two kinds of screen, from the same components and the same file naming. What decides which is
-the **root the author wrote**:
+Three kinds of screen, from the same components and the same file naming. What decides which is
+the **root the author wrote**, and there is no default — a screen that starts with anything else
+fails the build by the list of roots:
 
 | Root | Screen | What the layout is mounted on |
 | --- | --- | --- |
 | `<Container entity>` | a custom entity's chest screen | the vanilla chest, through a hook and a router |
-| anything else | a server form | the library's own container, which is already gated on the protocol header — no vanilla file is touched |
+| `<Screen>` | an action form | the library's own container, which is already gated on the protocol header — no vanilla file is touched |
+| `<Form>` | a native modal form | the same container, with the engine's fields in place |
 
 Compiling is worth different things to each. A container screen **cannot** be serialized at all:
 the chest screen has no string channel wide enough to carry a layout, so baking is the only way
@@ -21,8 +23,8 @@ travels.
 ## Authoring
 
 A screen is a script module ending in `.screen.tsx`, anywhere under `BP/scripts`, that
-default-exports a component. A `<Container>` at its root makes it a container screen; anything
-else makes it a form.
+default-exports a component. Its root names the screen: `<Container>` makes it a container
+screen, `<Screen>` an action form, `<Form>` a modal.
 
 ```tsx
 // packs/BP/scripts/screens/furnace.screen.tsx
@@ -47,22 +49,24 @@ serves it to every player who opens the entity. The build runs the component onc
 up position for position because a compiled screen cannot change shape. Nothing about a screen
 is declared twice.
 
-A form screen is the same file without the `<Container>`, and is opened with `render()` like any
-other screen:
+A form screen is the same file with `<Screen>` at its root, and is opened with `render()` like
+any other screen:
 
 ```tsx
 // packs/BP/scripts/screens/counter.screen.tsx
 /** @jsxImportSource @bedrock-core/ui */
-import { Button, Panel, Text, useState } from '@bedrock-core/ui';
+import { Button, Panel, Screen, Text, useState } from '@bedrock-core/ui';
 
 export default function Counter() {
   const [count, setCount] = useState(0);
 
   return (
-    <Panel padding={8} gap={6}>
-      <Text maxLength={16}>{`count ${count}`}</Text>
-      <Button enabled={count < 9} onPress={() => setCount(n => n + 1)}>{'+'}</Button>
-    </Panel>
+    <Screen>
+      <Panel padding={8} gap={6}>
+        <Text maxLength={16}>{`count ${count}`}</Text>
+        <Button enabled={count < 9} onPress={() => setCount(n => n + 1)}>{'+'}</Button>
+      </Panel>
+    </Screen>
   );
 }
 ```

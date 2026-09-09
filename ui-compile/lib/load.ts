@@ -169,7 +169,7 @@ createI18n(i18nBundle);
 import * as screenModule from ${JSON.stringify(screenPath)};
 import { buildRouter, compileFormScreen, compileScreen, formRouter } from '@bedrock-core/ui-compile';
 import {
-  buildScreenOnce, charsetLang, concreteRoots, CONTAINER_TYPE, ENCODING_MAX, ENCODING_MIN,
+  buildScreenOnce, charsetLang, ENCODING_MAX, ENCODING_MIN, hostFor,
   LAYOUT_PROPERTY, MAX_LAYOUT, VOCABULARY_MAX, VOCABULARY_MIN,
 } from '@bedrock-core/ui-runtime/compile';
 
@@ -186,10 +186,11 @@ if (typeof Screen !== 'function') {
 }
 
 // Which screen the author asked for is the root they wrote: \`<Container>\` is a
-// chest screen the way \`<Form>\` is a modal. Built once here to read that, and
-// again by the compiler — a build render is cheap and leaves nothing behind.
-const roots = concreteRoots(buildScreenOnce(Screen));
-const kind = roots.length === 1 && roots[0].type === CONTAINER_TYPE ? 'chest' : 'form';
+// chest screen the way \`<Form>\` is a modal and \`<Screen>\` an action form, and
+// a screen with no root fails here by the list of roots. Built once to read
+// that, and again by the compiler — a build render is cheap and leaves nothing
+// behind.
+const kind = hostFor(buildScreenOnce(Screen)).id === 'chest' ? 'chest' : 'form';
 
 // The COMPONENT, not the result of calling it: the compiler renders it under
 // its own owner, which is what makes the hooks inside it resolve.
