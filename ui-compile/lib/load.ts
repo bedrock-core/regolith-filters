@@ -43,6 +43,11 @@ export interface CompiledScreen {
   /** Type of the entity the screen opens from. */
   entity: string;
   document: Document;
+  /** The screen as faces alone: what the gallery draws. */
+  face: { document: Document };
+  /** The namespace of the addon's shared faces, and the looks this screen contributes to it. */
+  facesNamespace: string;
+  faces: Record<string, unknown>;
   allocation: { sentinels: number; drawn: number; channels: number; size: number };
   hasBackdrop: boolean;
   /** Whether any text is live, i.e. decoded through the character table. */
@@ -59,6 +64,11 @@ export interface CompiledFormScreen {
   title: string;
   marker?: string;
   document: Document;
+  /** The screen as faces alone: what the gallery draws. */
+  face: { document: Document };
+  /** The namespace of the addon's shared faces, and the looks this screen contributes to it. */
+  facesNamespace: string;
+  faces: Record<string, unknown>;
   /** Every entry the runtime emits, in order. The nth is `response.selection` n. */
   entries: readonly unknown[];
   /** What the build baked, registered beside the title for the runtime and `debug`. */
