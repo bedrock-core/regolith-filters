@@ -33,6 +33,24 @@ export const jsxSugarPlugin: Plugin = {
 import type { Document } from './hooks.ts';
 
 /** What `compileScreen` hands back for a chest screen. */
+/** A screen drawn as faces alone, mounted on the action form for the gallery. */
+export interface Preview {
+  /** The JSON UI namespace: `<screen namespace>__preview`. */
+  namespace: string;
+  /** The title the runtime opens it with, and what its gate reads. */
+  title: string;
+  document: Document;
+  hasBackdrop: boolean;
+}
+
+/** What the form router needs of a screen it gates: its name, its namespace, and whether a backdrop goes behind it. */
+export interface RoutedFormScreen {
+  name: string;
+  namespace: string;
+  hasBackdrop: boolean;
+  marker?: string;
+}
+
 export interface CompiledScreen {
   /** The screen's name, from its file name. */
   name: string;
@@ -48,6 +66,8 @@ export interface CompiledScreen {
   /** The namespace of the addon's shared faces, and the looks this screen contributes to it. */
   facesNamespace: string;
   faces: Record<string, unknown>;
+  /** The screen as faces alone under its preview namespace, for the gallery. */
+  preview: Preview;
   allocation: { sentinels: number; drawn: number; channels: number; size: number };
   hasBackdrop: boolean;
   /** Whether any text is live, i.e. decoded through the character table. */
@@ -69,6 +89,8 @@ export interface CompiledFormScreen {
   /** The namespace of the addon's shared faces, and the looks this screen contributes to it. */
   facesNamespace: string;
   faces: Record<string, unknown>;
+  /** The screen as faces alone under its preview namespace, for the gallery. */
+  preview: Preview;
   /** Every entry the runtime emits, in order. The nth is `response.selection` n. */
   entries: readonly unknown[];
   /** What the build baked, registered beside the title for the runtime and `debug`. */
@@ -98,7 +120,7 @@ export interface ScreenBundle {
   /** The addon's hooks into vanilla's chest files, its router, and the router's pack path. */
   buildRouter: (screens: CompiledScreen[]) => { hooks: Hook[]; router: Document; routerFile: string };
   /** The addon's hook into the compiled-form mount, and its router. */
-  formRouter: (screens: CompiledFormScreen[], addon: string) => {
+  formRouter: (screens: RoutedFormScreen[], addon: string) => {
     hook: Hook;
     router: Document;
     routerFile: string;
