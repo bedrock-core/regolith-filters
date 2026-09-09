@@ -63,7 +63,7 @@
     "componentsModule": {
       "type": "string",
       "default": "",
-      "description": "Module whose default export is the registry of components MDX `cmp` blocks may use (a GuideComponents record), relative to the Regolith temp directory, e.g. BP/scripts/UI/guideComponents.ts. Empty, a cmp block renders the unsupported-content placeholder on compiled screens."
+      "description": "Module whose default export is the registry of components MDX `cmp` blocks may use (a GuideComponents record), relative to the Regolith temp directory, e.g. BP/scripts/guides/components.tsx. Empty, a cmp block renders the unsupported-content placeholder on compiled screens."
     }
   }
 }
