@@ -49,6 +49,14 @@ export interface RoutedFormScreen {
   namespace: string;
   hasBackdrop: boolean;
   marker?: string;
+  /** With `marker`: the host's frame and the area's offset in it, which the mount places the screen by. */
+  embed?: EmbedPlacement;
+}
+
+/** How an embedded screen sits in its host's frame. */
+export interface EmbedPlacement {
+  readonly frame: readonly [number, number];
+  readonly offset: readonly [number, number];
 }
 
 export interface CompiledScreen {
@@ -83,6 +91,7 @@ export interface CompiledFormScreen {
   /** What the runtime shows the form with, and what the mount gates on. */
   title: string;
   marker?: string;
+  embed?: EmbedPlacement;
   document: Document;
   /** The screen as faces alone: what the gallery draws. */
   face: { document: Document };
