@@ -15,9 +15,8 @@ import { pathToFileURL } from 'node:url';
 
 import { build, type Plugin } from 'esbuild';
 
+import { gameStubPlugin } from './stubs/game.ts';
 import { desugarJsxConditionals } from './sugar.ts';
-
-const stub = path.join(import.meta.dirname, 'stubs', 'minecraft.cjs');
 
 /** Rewrites React's conditional-rendering idioms in screen modules; see sugar.ts. */
 export const jsxSugarPlugin: Plugin = {
@@ -262,7 +261,11 @@ export async function loadScreen(
  * The screen names a library's screens module exports: the keys of its
  * default export, read by bundling the module once with nothing else.
  */
-export async function listScreenExports(specifier: string, cacheDir: string): Promise<string[]> {
+export async function listScreenExports(
+  specifier: string,
+  cacheDir: string,
+  aliases: Record<string, string> = {},
+): Promise<string[]> {
   const exported = await evaluateEntry<unknown>({
     contents: `import * as mod from ${JSON.stringify(specifier)};
 export default Object.keys(mod.default ?? {});
@@ -271,6 +274,7 @@ export default Object.keys(mod.default ?? {});
     sourcefile: 'screens.list.entry.ts',
     loader: 'ts',
     cacheDir,
+    aliases,
     key: specifier,
   });
 
@@ -312,15 +316,11 @@ export async function evaluateEntry<T>(
     format: 'esm',
     platform: 'node',
     ...jsxImportSource === undefined ? {} : { jsx: 'automatic', jsxImportSource },
-    // The game modules only have to exist; see the stub for why.
-    alias: {
-      '@minecraft/server': stub,
-      '@minecraft/server-ui': stub,
-      ...aliases,
-    },
+    alias: aliases,
     // The same desugaring the bundler applies to the shipped scripts, so the
     // shape a compile bakes and the tree the runtime walks agree.
-    plugins: [jsxSugarPlugin],
+    // The game modules are stubbed rather than resolved; see stubs/game.ts.
+    plugins: [jsxSugarPlugin, gameStubPlugin(resolveDir)],
     write: false,
     logLevel: 'silent',
   });

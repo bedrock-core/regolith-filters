@@ -30,6 +30,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { readDeclaration } from './lib/declaration.ts';
 import type { Document } from './lib/hooks.ts';
 import { mergeHook, parseJsonc } from './lib/hooks.ts';
 import type { CompiledFormScreen, CompiledScreen, Hook, RoutedFormScreen, ScreenBundle } from './lib/load.ts';
@@ -53,6 +54,24 @@ if (!projectRoot) {
 // stack with every other pack's, and the router under the addon's namespace,
 // so two addons' routers never overwrite each other in a world.
 const SOURCE_DIR = 'BP/scripts';
+
+// Where an addon says what it is. `core.register({ manifest, config, ... })` is
+// declared from the script entry, and the bundler resolves the same file, so
+// the build reads the declaration there and shapes the bedrock-core screens the
+// addon gets from it.
+const ENTRY_FILES = ['BP/scripts/main.ts', 'BP/scripts/index.ts'];
+
+/** The screens the config UI serves every addon that mounts it with `ui(core)`. */
+const STACK_SCREENS = '@bedrock-core/config/compiled';
+
+/** The screens an addon's own declaration becomes, written beside the other generated modules. */
+const DECLARED_SCREENS_FILE = 'declared.screens.ts';
+
+/** What the generated page is named among them. */
+const ADDON_PAGE_NAME = 'addon_page';
+
+/** How an addon's scripts reach the module that registers its compiled screens. */
+const GENERATED_UI = '@bedrock-core/generated/ui';
 const OUTPUT_DIR = 'RP/ui/core-ui/screens';
 
 /** Vanilla's form screen file, hooked by every pack that compiles forms but does not define the mount. */
@@ -108,10 +127,12 @@ interface Settings {
    */
   gallery?: boolean;
   /**
-   * Modules whose default export is a record of screens to compile besides
-   * the addon's own `*.screen.tsx` — a library's generic screens, such as
-   * `@bedrock-core/config/compiled`. Each export key names the screen; the
-   * bundle resolves the specifier the way the addon's scripts would.
+   * Further modules whose default export is a record of screens to compile.
+   *
+   * The screens the config UI serves are already compiled from the addon's
+   * declaration, so this is for a library the declaration does not name. Each
+   * export key names the screen; the bundle resolves the specifier the way the
+   * addon's scripts would.
    */
   screens?: string[];
 }
@@ -177,10 +198,136 @@ interface ScreenEntry {
 
 const entries: ScreenEntry[] = screenPaths.map(screenPath => ({ screenPath, name: path.basename(screenPath, SCREEN_SUFFIX) }));
 
-// A library's generic screens, compiled into THIS addon's pack the way its
-// own files are: the runtime that renders them is the one this addon ships.
-for (const specifier of settings.screens ?? []) {
-  const exported = await listScreenExports(specifier, path.join(projectRoot, '.regolith', 'cache', 'ui-compile'))
+// What this addon declares, read where it says it: `core.register`. The
+// bedrock-core screens an addon is served are shaped from that — a config
+// screen per section of its schema, built for the settings that section has —
+// so nothing is wired up twice. Declaring is what asks for them.
+const entryPath = ENTRY_FILES.map(file => path.resolve(file)).find(file => fs.existsSync(file));
+
+const read = entryPath === undefined
+  ? {}
+  : await readDeclaration({ entryPath, cacheDir, jsxImportSource: JSX_IMPORT_SOURCE, aliases: generatedAliases })
+    .catch((error: unknown) => {
+      console.error(`❌ ui-compile: cannot read the declaration in ${rel(entryPath)}: ${String(error)}`);
+
+      return process.exit(1);
+    });
+
+const { declaration } = read;
+
+// An addon whose entry throws on the way to its register call gets none of the
+// screens that follow from declaring, so the reason is said out loud here: the
+// alternative is a pack that builds clean and has no config screen in it.
+if (read.failure !== undefined && entryPath !== undefined) {
+  console.warn(`⚠️  ui-compile: ${rel(entryPath)} registered nothing — ${read.failure}`);
+}
+
+const generatedScreens: string[] = [];
+
+// The manifest, wherever the runtime the addon ships keeps it.
+const manifest = { ...declaration, ...declaration?.manifest };
+
+/**
+ * What the addon's page in the shared list draws, when the build is the one to
+ * write it.
+ *
+ * Everything on the page is in the manifest, so an addon that declared one has
+ * already said all of it. An addon that named its own `page` in the register
+ * call means a screen it wrote, and that one is left alone.
+ */
+const pageInfo = declaration?.page === undefined
+  && manifest.creator !== undefined && manifest.packName !== undefined && manifest.version !== undefined
+  ? {
+      packName: manifest.packName,
+      version: manifest.version,
+      creator: manifest.creator,
+      ...manifest.creatorName === undefined ? {} : { creatorName: manifest.creatorName },
+      ...manifest.description === undefined ? {} : { description: manifest.description },
+      ...manifest.icon === undefined ? {} : { icon: manifest.icon },
+      ...manifest.thumbnail === undefined ? {} : { thumbnail: manifest.thumbnail },
+    }
+  : undefined;
+
+// The bundles the filters before this one generated, which the addon publishes
+// for other addons to read. Both are plain data written into this workspace, so
+// the generated module imports them the way the addon's own code would.
+const declaredBundles = [
+  ...i18nBundle === undefined ? [] : [{ name: 'translations', from: '@bedrock-core/generated/i18n' }],
+  ...fs.existsSync(GENERATED_BUNDLES['@bedrock-core/generated/guides'] ?? '') ? [{ name: 'guide', from: '@bedrock-core/generated/guides' }] : [],
+];
+
+if (pageInfo !== undefined || declaration?.config !== undefined) {
+  const module = path.join(path.resolve(GENERATED_DIR), DECLARED_SCREENS_FILE);
+  const page = pageInfo === undefined
+    ? []
+    : [
+        `const AddonListPage = addonPageScreen(${JSON.stringify(pageInfo, undefined, 2)});`,
+        '',
+      ];
+  const config = declaration?.config === undefined
+    ? []
+    : [
+        `const definition = ${JSON.stringify(declaration.config, undefined, 2)} as const;`,
+        '',
+        'const screens = configScreens(definition as ConfigDefinition);',
+        '',
+        'registerConfigScreens(screens);',
+        '',
+      ];
+  const declared = [
+    ...pageInfo === undefined ? [] : ['page: AddonListPage'],
+    ...declaredBundles.map(bundle => bundle.name),
+  ];
+
+  // Registered as a side effect, because this module is imported at runtime
+  // anyway — `ui.generated.ts` imports it to register the compiled screens, and
+  // the bundler inlines that. So the config app finds the screen a section
+  // wants because the addon declared the section.
+  fs.mkdirSync(path.dirname(module), { recursive: true });
+  fs.writeFileSync(module, [
+    '// GENERATED by the ui-compile filter — do not edit.',
+    '//',
+    '// What this addon declared, as the screens and announcements that follow',
+    '// from it: its page in the shared addon list drawn from its manifest, one',
+    '// config screen per section of its schema shaped for the settings that',
+    '// section has, and the bundles `ui()` publishes on its behalf.',
+    '',
+    `import { ${[
+      ...pageInfo === undefined ? [] : ['addonPageScreen'],
+      ...declaration?.config === undefined ? [] : ['configScreens', 'registerConfigScreens'],
+      ...declared.length === 0 ? [] : ['registerDeclared'],
+    ].join(', ')} } from '@bedrock-core/config';`,
+    ...declaration?.config === undefined ? [] : ['import type { ConfigDefinition } from \'@bedrock-core/server-runtime\';'],
+    ...declaredBundles.map(bundle => `import ${bundle.name} from '${bundle.from}';`),
+    '',
+    ...page,
+    ...config,
+    ...declared.length === 0 ? [] : [`registerDeclared({ ${declared.join(', ')} });`, ''],
+    `export default { ${[
+      ...pageInfo === undefined ? [] : [`${ADDON_PAGE_NAME}: AddonListPage`],
+      ...declaration?.config === undefined ? [] : ['...screens'],
+    ].join(', ')} };`,
+    '',
+  ].join('\n'), 'utf-8');
+
+  // Relative to the WORKSPACE, which is where the filter runs and where a
+  // `screens` specifier is resolved from.
+  generatedScreens.push(`./${path.relative(process.cwd(), module).replaceAll('\\', '/')}`);
+  console.log(`\u{1F9E9} ui-compile: declaration \u2192 ${GENERATED_DIR}/${DECLARED_SCREENS_FILE}`);
+}
+
+// The screens the config UI serves every addon, compiled into THIS addon's pack
+// the way its own files are: the runtime that renders them is the one this
+// addon ships. The declaration is what asks for them, because `ui(core)` is how
+// an addon mounts the stack and `core.register` is what it hands over.
+const specifiers = [...new Set([
+  ...settings.screens ?? [],
+  ...declaration === undefined ? [] : [STACK_SCREENS],
+  ...generatedScreens,
+])];
+
+for (const specifier of specifiers) {
+  const exported = await listScreenExports(specifier, cacheDir, generatedAliases)
     .catch((error: unknown) => {
       console.error(`❌ ui-compile: cannot list the screens of ${specifier}: ${String(error)}`);
 
@@ -216,30 +363,11 @@ if (duplicate !== undefined) {
 
 // The addon's namespace prefixes every screen's JSON UI namespace, so a screen
 // is `<namespace>_<name>` — the addon's own name, not the library's. Taken from
-// the `namespace` setting, or scanned from the `core.register({ creator, pack })`
-// the server package writes, the way the other filters resolve it.
-const CREATOR_RE = /\bcreator\s*:\s*(['"`])([a-z0-9_]+)\1/g;
-const PACK_RE = /\bpack\s*:\s*(['"`])([a-z0-9_]+)\1/g;
-
-const scanNamespace = (dir: string): string | undefined => {
-  const creators = new Set<string>();
-  const packs = new Set<string>();
-
-  for (const file of [...findFiles(dir, '.ts'), ...findFiles(dir, '.tsx'), ...findFiles(dir, '.js')]) {
-    const text = fs.readFileSync(file, 'utf-8');
-
-    if (!text.includes('.register(')) {
-      continue;
-    }
-
-    for (const m of text.matchAll(CREATOR_RE)) if (m[2] !== undefined) creators.add(m[2]);
-    for (const m of text.matchAll(PACK_RE)) if (m[2] !== undefined) packs.add(m[2]);
-  }
-
-  return creators.size === 1 && packs.size === 1
-    ? `${[...creators][0] ?? ''}_${[...packs][0] ?? ''}`
-    : undefined;
-};
+// the `namespace` setting, or from the manifest the addon declared: the same
+// `core.register({ manifest })` the game reads it from.
+const declaredNamespace = manifest.creator !== undefined && manifest.pack !== undefined
+  ? `${manifest.creator}_${manifest.pack}`
+  : undefined;
 
 let namespace = settings.namespace;
 
@@ -249,12 +377,12 @@ if (namespace) {
     process.exit(1);
   }
 } else {
-  namespace = scanNamespace(path.resolve(SOURCE_DIR));
+  namespace = declaredNamespace;
 
   if (namespace === undefined) {
     console.error(
       '❌ ui-compile: no namespace — set the "namespace" setting, '
-      + 'or write creator/pack as string literals in core.register()',
+      + 'or declare `manifest: { creator, pack }` in core.register()',
     );
     process.exit(1);
   }
@@ -791,6 +919,17 @@ if (forms.length > 0) {
     return relative.startsWith('.') ? relative : `./${relative}`;
   };
 
+  /**
+   * A screens module as the generated file must import it.
+   *
+   * A package is named the same from anywhere, but an addon's OWN module is
+   * named relative to the workspace in the setting — where the author writes
+   * it — and the generated file sits two folders down from there.
+   */
+  const moduleSpecifier = (specifier: string): string => (specifier.startsWith('.')
+    ? specifierFor(path.resolve(specifier))
+    : specifier);
+
   const gallery = settings.gallery === true ? { alias: `Screen${forms.findIndex(screen => screen.name === GALLERY_NAME)}` } : undefined;
   const registrations = forms.map((screen, index) => {
     const from = formSources.get(screen.name);
@@ -798,7 +937,7 @@ if (forms.length > 0) {
 
     return {
       alias: `Screen${index}`,
-      source: library ? from.specifier : specifierFor(from ?? ''),
+      source: library ? moduleSpecifier(from.specifier) : specifierFor(from ?? ''),
       // A library screen is a member of its module's default export.
       member: library ? from.exportName : undefined,
       title: screen.title,
@@ -856,6 +995,22 @@ if (forms.length > 0) {
   );
 
   console.log(`   ↳ ${forms.length} compiled form screen(s) → ${GENERATED_DIR}/${GENERATED_FILE}`);
+
+  // The generated module only registers what it registers once something
+  // imports it, and an addon that forgets the import gets no failure — every
+  // compiled screen quietly serializes instead, which is the bug that is
+  // hardest to see. So the build adds the import to the entry it just compiled
+  // these screens for. The workspace copy, which is the one bundled; the
+  // addon's own file is untouched.
+  if (entryPath !== undefined) {
+    const entrySource = fs.readFileSync(entryPath, 'utf-8');
+
+    if (!entrySource.includes(GENERATED_UI)) {
+      fs.writeFileSync(entryPath, `import '${GENERATED_UI}';
+${entrySource}`, 'utf-8');
+      console.log(`   ↳ ${rel(entryPath)} imports ${GENERATED_UI}`);
+    }
+  }
 }
 
 // ─── Build stamp ──────────────────────────────────────────────────────────────

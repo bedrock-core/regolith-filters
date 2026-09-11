@@ -112,7 +112,8 @@ like any other script.
 | `RP/ui/core-ui/screens/gallery.json` | Regolith temp, `gallery` only | a compiled screen listing every screen of the addon; a press opens that screen's preview |
 | `RP/ui/core-ui/screens/<namespace>_forms.json` | Regolith temp | the addon's compiled FORM screens: one gated host each, picked by the title the runtime opens them with |
 | `RP/ui/core-ui/form/mount.json` | Regolith temp (edited or new copy) | the addon's insert into the library's form mount. A modification of the mount's own path, so every pack's copy stacks |
-| `data/ui/ui.generated.ts` | Regolith temp | one `registerCompiledScreen` call per compiled form, and `openGallery(player)`. Import it once (`@bedrock-core/generated/ui`) and `render()` shows those screens from the pack instead of serializing them |
+| `data/ui/declared.screens.ts` | Regolith temp | the screens that follow from `core.register()`: the addon's page in the shared list, drawn from its manifest, and one config screen per section of its schema, shaped for the settings that section has |
+| `data/ui/ui.generated.ts` | Regolith temp | one `registerCompiledScreen` call per compiled form, and `openGallery(player)`. The filter adds its import to the addon's script entry, so `render()` shows those screens from the pack instead of serializing them |
 | `RP/ui/core-ui/screens/<namespace>_router.json` | Regolith temp | the addon's router: a gated host per screen under the addon's root — see [The router](#the-router) |
 | `RP/ui/chest_screen.json` | Regolith temp | the hook: a copy of vanilla's chest file holding one `modifications` entry, inserting the addon's root into the chest top half the render pack's chest root mounts on both UI profiles |
 | `RP/ui/_ui_defs.json` | Regolith temp (edited or new copy) | the three above registered, or the game never loads them |
@@ -196,10 +197,10 @@ No settings are required.
 
 | Setting | Type | Default | Description |
 | --- | --- | --- | --- |
-| `namespace` | `string` | scanned | The addon's namespace: it prefixes every screen's JSON UI namespace and names the router file. Left unset, it is read from the `creator` and `pack` string literals in `core.register()` |
+| `namespace` | `string` | declared | The addon's namespace: it prefixes every screen's JSON UI namespace and names the router file. Left unset, it is the `creator` and `pack` of the manifest the addon declared |
 | `stamp` | `boolean` | `false` | Draw a build stamp at the HUD's top-left: a short hash of every compiled screen plus the build clock. For a development profile |
 | `gallery` | `boolean` | `false` | Write every screen's preview — the screen as faces alone, no host behind it — and a gallery screen that opens each, reached as `openGallery(player)` from `@bedrock-core/generated/ui`. For a development profile: the place a screen is looked at before any host serves it |
-| `screens` | `string[]` | `[]` | Modules whose default export is a record of screens to compile besides the addon's own `*.screen.tsx`, such as `@bedrock-core/config/compiled` |
+| `screens` | `string[]` | `[]` | Further modules whose default export is a record of screens to compile, for a library the addon's declaration does not already name |
 
 Every path — screens under `BP/scripts`, output under `RP/ui/core-ui/screens`, the hook at
 `RP/ui/chest_screen.json`, entities under `BP/entities`, texts under `RP/texts` — is what the game
