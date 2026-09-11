@@ -87,6 +87,11 @@ const JSX_IMPORT_SOURCE = '@bedrock-core/ui';
 const GENERATED_DIR = 'data/ui';
 const GENERATED_FILE = 'ui.generated.ts';
 
+// The keys, declared back in the REAL project rather than the workspace: this
+// one is for the editor, which reads the source tree and never sees a Regolith
+// run. The i18n and guides filters commit their declarations the same way.
+const KEYS_FILE = 'screens.generated.d.ts';
+
 // The definition every addon's compiled form screens are added to. Named here
 // because the filter has to recognise a pack that DEFINES it — the library's
 // own — from one that only extends it.
@@ -187,6 +192,31 @@ const screenPaths = findFiles(path.resolve(SOURCE_DIR), SCREEN_SUFFIX).sort();
 
 const rel = (file: string): string => path.isAbsolute(file) ? path.relative(projectRoot, file).replaceAll('\\', '/') : file;
 
+/** Regolith's data path on real disk (`packs/data` unless the project moved it). */
+const projectDataPath = (): string => {
+  try {
+    const config = JSON.parse(fs.readFileSync(path.join(projectRoot, 'config.json'), 'utf-8')) as { regolith?: { dataPath?: unknown } };
+
+    if (typeof config.regolith?.dataPath === 'string') { return config.regolith.dataPath; }
+  } catch {
+    // A project without a readable config takes the default.
+  }
+
+  return 'packs/data';
+};
+
+/** Write into the real project, but only when the content actually moved. */
+const writeProjectFileIfChanged = (relPath: string, content: string): void => {
+  const abs = path.join(projectRoot, relPath);
+
+  if (fs.existsSync(abs) && fs.readFileSync(abs, 'utf-8') === content) { return; }
+
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  fs.writeFileSync(abs, content, 'utf-8');
+  console.log(`   ↳ ${relPath} — regenerated`);
+};
+
+
 /** One screen to compile: the addon's own file, or one export of a library's screens module. */
 interface ScreenEntry {
   /** A file under BP/scripts, or the bare specifier of a screens module. */
@@ -248,12 +278,11 @@ const pageInfo = declaration?.page === undefined
     }
   : undefined;
 
-// The bundles the filters before this one generated, which the addon publishes
-// for other addons to read. Both are plain data written into this workspace, so
-// the generated module imports them the way the addon's own code would.
+// The bundle the filters before this one generated, which the addon publishes
+// for other addons to read. Plain data written into this workspace, so the
+// generated module imports it the way the addon's own code would.
 const declaredBundles = [
   ...i18nBundle === undefined ? [] : [{ name: 'translations', from: '@bedrock-core/generated/i18n' }],
-  ...fs.existsSync(GENERATED_BUNDLES['@bedrock-core/generated/guides'] ?? '') ? [{ name: 'guide', from: '@bedrock-core/generated/guides' }] : [],
 ];
 
 if (pageInfo !== undefined || declaration?.config !== undefined) {
@@ -389,6 +418,16 @@ if (namespace) {
 }
 
 console.log(`🏷️  ui-compile: namespace "${namespace}"`);
+
+/**
+ * The key a screen is navigated by: `<addon>:<name>`.
+ *
+ * The same two halves the JSON UI namespace joins with `_`, kept apart here
+ * because this is the one an author types — in a `<Link to>`, in a `navigate()`
+ * — and because an addon namespace may itself contain an underscore, so only
+ * the build can say where the screen's name begins.
+ */
+const screenKey = (name: string): string => `${namespace}:${name}`;
 
 // ─── Compile ──────────────────────────────────────────────────────────────────
 
@@ -571,7 +610,11 @@ if (settings.gallery === true) {
 
   const galleryDir = path.resolve(GALLERY_DIR);
   const galleryPath = path.join(galleryDir, `${GALLERY_NAME}.screen.tsx`);
-  const rows = previewed.map(screen => ({ label: screen.name, title: screen.preview.title }));
+  const rows = previewed.map(screen => ({
+    label: screen.name,
+    key: screenKey(`${screen.name}__preview`),
+    title: screen.preview.title,
+  }));
 
   fs.mkdirSync(galleryDir, { recursive: true });
   fs.writeFileSync(
@@ -586,17 +629,15 @@ if (settings.gallery === true) {
       '// lets a press leave the gallery cleanly — a form shown outside the session',
       '// races the gallery\'s own re-present.',
       '',
-      "import { Button, Panel, registerCompiledScreen, render, Screen, Scroll, Text, type FunctionComponent, type JSX, type PressEvent } from '@bedrock-core/ui';",
+      "import { Link, Panel, registerCompiledScreen, Screen, Scroll, Text, type FunctionComponent, type JSX } from '@bedrock-core/ui';",
       '',
-      `const SCREENS: readonly { readonly label: string; readonly title: string }[] = ${JSON.stringify(rows, null, 2)};`,
+      `const SCREENS: readonly { readonly label: string; readonly key: string; readonly title: string }[] = ${JSON.stringify(rows, null, 2)};`,
       '',
-      'const previews: readonly FunctionComponent[] = SCREENS.map((screen): FunctionComponent => {',
-      '  const Preview = (): JSX.Element => <Screen><Panel width={1} height={1} /></Screen>;',
+      'for (const screen of SCREENS) {',
+      '  const Preview: FunctionComponent = (): JSX.Element => <Screen><Panel width={1} height={1} /></Screen>;',
       '',
-      '  registerCompiledScreen(Preview, screen.title);',
-      '',
-      '  return Preview;',
-      '});',
+      '  registerCompiledScreen(Preview, { key: screen.key, title: screen.title });',
+      '}',
       '',
       'const ROW = 18;',
       '',
@@ -607,9 +648,10 @@ if (settings.gallery === true) {
       '        <Text>{\'§lGallery\'}</Text>',
       '        <Scroll width={288} height={168}>',
       '          <Panel flexDirection="column" gap={2}>',
-      '            {SCREENS.map((screen, index) => (',
-      '              <Button',
+      '            {SCREENS.map(screen => (',
+      '              <Link',
       '                key={screen.title}',
+      '                to={screen.key}',
       '                width={276}',
       '                height={ROW}',
       '                justifyContent="center"',
@@ -617,16 +659,9 @@ if (settings.gallery === true) {
       '                background="textures/ui/button_borderless_dark"',
       '                backgroundHover="textures/ui/button_borderless_darkhover"',
       '                backgroundPressed="textures/ui/button_borderless_darkpressed"',
-      '                onPress={(event: PressEvent): void => {',
-      '                  const Preview = previews[index];',
-      '',
-      '                  if (Preview !== undefined) {',
-      '                    render(Preview, event.player);',
-      '                  }',
-      '                }}',
       '              >',
       '                <Text>{screen.label}</Text>',
-      '              </Button>',
+      '              </Link>',
       '            ))}',
       '          </Panel>',
       '        </Scroll>',
@@ -940,6 +975,11 @@ if (forms.length > 0) {
       source: library ? moduleSpecifier(from.specifier) : specifierFor(from ?? ''),
       // A library screen is a member of its module's default export.
       member: library ? from.exportName : undefined,
+      // What anything outside this bundle names the screen by. The title carries
+      // the same two halves the JSON UI way (`<addon>_<name>`), which cannot be
+      // split back apart — an addon namespace may contain the separator — so the
+      // key is written out rather than derived.
+      key: screenKey(screen.name),
       title: screen.title,
       snapshot: screen.snapshot,
     };
@@ -962,12 +1002,39 @@ if (forms.length > 0) {
       '//',
       `// encoding ${runtime.windows.encodingMax} (window ${runtime.windows.encodingMin}..${runtime.windows.encodingMax}), vocabulary ${runtime.windows.vocabularyMax} (window ${runtime.windows.vocabularyMin}..${runtime.windows.vocabularyMax})`,
       '',
-      'import { registerCompiledScreen, render, type RenderOptions } from \'@bedrock-core/ui\';',
+      "import { addonReference, registerCompiledScreen, render, type AddonReference, type RenderOptions } from '@bedrock-core/ui';",
       'import type { Player } from \'@minecraft/server\';',
       ...registrations.map(entry => `import ${entry.alias} from '${entry.source}';`),
       '',
       ...registrations.map(entry =>
-        `registerCompiledScreen(${entry.alias}${entry.member === undefined ? '' : `[${JSON.stringify(entry.member)}]`}, ${JSON.stringify(entry.title)}, ${JSON.stringify(entry.snapshot)});`),
+        `registerCompiledScreen(${entry.alias}${entry.member === undefined ? '' : `[${JSON.stringify(entry.member)}]`}, `
+        + `{ key: ${JSON.stringify(entry.key)}, title: ${JSON.stringify(entry.title)}, snapshot: ${JSON.stringify(entry.snapshot)} });`),
+      '',
+      '/** Every screen this addon compiled, by the key it is navigated with. */',
+      `export const SCREEN_KEYS = ${JSON.stringify(registrations.map(entry => entry.key), null, 2)} as const;`,
+      '',
+      "/** The key of one of this addon's screens. */",
+      'export type ScreenKey = typeof SCREEN_KEYS[number];',
+      '',
+      "// What `navigate()` accepts is typed from this addon's own keys, while",
+      "// staying open to another addon's: a foreign key is a string this build",
+      '// has never seen and still resolves, through the replicated references.',
+      "declare module '@bedrock-core/ui-runtime' {",
+      '  interface ScreenKeys extends Record<ScreenKey, true> {}',
+      '}',
+      '',
+      "/** This addon's namespace, as the build wrote it into every key and title. */",
+      `export const UI_NAMESPACE = ${JSON.stringify(namespace)};`,
+      '',
+      '/**',
+      ' * Every static screen of this addon as another realm can show it: the title,',
+      ' * the entry values and where each press leads. Announce it once at startup —',
+      ' * `core.register({ screens: uiReference() })` — and any realm draws this',
+      " * addon's screens from the pack every client already holds.",
+      ' */',
+      'export function uiReference(): AddonReference {',
+      '  return addonReference(UI_NAMESPACE);',
+      '}',
       '',
       '/**',
       ' * Opens the gallery: every compiled screen of this addon as faces alone.',
@@ -995,6 +1062,27 @@ if (forms.length > 0) {
   );
 
   console.log(`   ↳ ${forms.length} compiled form screen(s) → ${GENERATED_DIR}/${GENERATED_FILE}`);
+
+  // The same keys, declared back in the project the author edits. The module
+  // above only ever exists inside a Regolith run, so without this the editor
+  // has no keys to offer and `navigate('…')` takes any string it is given.
+  writeProjectFileIfChanged(path.join(projectDataPath(), 'ui', KEYS_FILE), [
+    '// GENERATED by the ui-compile filter — do not edit.',
+    '//',
+    '// The screens this addon compiled, as the keys they are navigated by. Declared',
+    '// so the editor can offer them: `navigate()` and `<Link to>` take one of these,',
+    "// and still accept another addon's key — a screen this build never saw is",
+    '// resolved at runtime from the reference its owner published.',
+    '',
+    "declare module '@bedrock-core/ui-runtime' {",
+    '  interface ScreenKeys {',
+    ...registrations.map(entry => `    ${JSON.stringify(entry.key)}: true;`),
+    '  }',
+    '}',
+    '',
+    'export {};',
+    '',
+  ].join('\n'));
 
   // The generated module only registers what it registers once something
   // imports it, and an addon that forgets the import gets no failure — every

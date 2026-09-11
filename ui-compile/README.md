@@ -79,8 +79,8 @@ import Counter from './screens/counter.screen';
 render(Counter, player);
 ```
 
-Without that import every screen still renders — serialized by the interpreter, exactly as
-before — which is what makes compiling additive rather than a migration.
+Without that import nothing is registered and `render()` refuses every screen: a screen is
+drawn from the pack, and the registration is what says which compiled screen it is.
 
 A compiled screen is baked, so the same two rules apply to both kinds: `<Text>` that changes
 needs `maxLength` to reserve room for it, and the shape cannot move between renders. The build

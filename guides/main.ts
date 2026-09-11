@@ -23,7 +23,7 @@ import { keyPrefix, sanitizeSegment } from './lib/keys.ts';
 import { scanNamespace } from './lib/namespace.ts';
 import { reconcileLocale, summarizeKeysByPage } from './lib/locales.ts';
 import { readPngSize } from './lib/png.ts';
-import { guideScreenModules } from './lib/screens.ts';
+import { guideScreenModules, guideScreenName } from './lib/screens.ts';
 
 // ─── Environment ──────────────────────────────────────────────────────────────
 
@@ -305,6 +305,14 @@ function main(): void {
   if (settings.strictLocales && drift) {
     console.error('❌ strictLocales is enabled and locales are out of sync with the default locale');
     process.exit(1);
+  }
+
+  // Each page's compiled screen name, so a link inside a guide reaches the
+  // module this filter names rather than re-deriving the fold at runtime.
+  if (settings.compileScreens) {
+    manifest.screens = Object.fromEntries(
+      Object.keys(manifest.pages).map((pageId: string) => [pageId, guideScreenName(pageId)]),
+    );
   }
 
   // ── Write outputs ─────────────────────────────────────────────────────────

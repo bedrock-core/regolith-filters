@@ -73,10 +73,10 @@ Then render it:
 
 ```tsx
 import guides from '@bedrock-core/generated/guides';
-import { createGuide } from '@bedrock-core/guides';
+import { openGuide } from '@bedrock-core/guides';
 
 // Build once, host behind a single navigator screen:
-const Guide = createGuide(guides, { title: 'My Addon' });
+openGuide('my_addon', player, { manifest: guides });
 // <Guide onExit={() => navigation.goBack()} />
 ```
 
