@@ -1,5 +1,5 @@
 {
-  "name": "@bedrock-core/regolith-filters_ui-compile",
+  "name": "@bedrock-core/regolith-filters_ui-compiler",
   "version": "0.1.0",
   "description": "Regolith filter that compiles container screens written in JSX into static JSON UI.",
   "type": "module",

@@ -3,7 +3,7 @@
 // `core.register({ manifest: { creator, pack } })` already carries the two
 // fields the server runtime joins at startup, so reading the string literals
 // back keeps the build-time key prefix and the runtime state namespace from
-// diverging. The i18n and ui-compile filters resolve it the same way.
+// diverging. The i18n and ui-compiler filters resolve it the same way.
 
 import fs from 'node:fs';
 import path from 'node:path';

@@ -17,7 +17,7 @@
 		},
 		"guides": { "$ref": "#/definitions/stage" },
 		"i18n": { "$ref": "#/definitions/stage" },
-		"ui-compile": { "$ref": "#/definitions/stage" },
+		"ui-compiler": { "$ref": "#/definitions/stage" },
 		"bundler": { "$ref": "#/definitions/stage" }
 	},
 	"definitions": {

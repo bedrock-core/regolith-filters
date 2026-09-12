@@ -1,7 +1,7 @@
 // Compiles one screen module by bundling it together with the pipeline.
 //
 // The pipeline runs INSIDE the bundle rather than in the filter, so it resolves
-// `@bedrock-core/ui-runtime` and `@bedrock-core/ui-compile` from the project's
+// `@bedrock-core/ui-runtime` and `@bedrock-core/ui-compiler` from the project's
 // own node_modules. A screen therefore always compiles against the library
 // version the addon actually ships, and the filter can never drift from it.
 // That is also why every value the emitted JSON UI shares with the runtime —
@@ -126,7 +126,7 @@ export interface Hook {
  * project's own library the filter needs to emit around it.
  *
  * Structural rather than imported, on purpose. The types live in
- * `@bedrock-core/ui-compile`, which resolves from the ADDON's node_modules at
+ * `@bedrock-core/ui-compiler`, which resolves from the ADDON's node_modules at
  * build time and not from this filter's — the same reason the pipeline runs
  * inside the bundle instead of here.
  */
@@ -175,7 +175,7 @@ createI18n(i18nBundle);
 // named import a module does not export, and a missing default deserves the
 // message below instead.
 import * as screenModule from ${JSON.stringify(screenPath)};
-import { buildRouter, compileFormScreen, compileScreen, formRouter } from '@bedrock-core/ui-compile';
+import { buildRouter, compileFormScreen, compileScreen, formRouter } from '@bedrock-core/ui-compiler';
 import {
   buildScreenOnce, charsetLang, ENCODING_MAX, ENCODING_MIN, hostFor,
   LAYOUT_PROPERTY, MAX_LAYOUT, VOCABULARY_MAX, VOCABULARY_MIN,

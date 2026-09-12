@@ -19,7 +19,7 @@
     "manifest": {
       "url": "github.com/bedrock-core/regolith-filters"
     },
-    "ui-compile": {
+    "ui-compiler": {
       "url": "github.com/bedrock-core/regolith-filters"
     }
   }

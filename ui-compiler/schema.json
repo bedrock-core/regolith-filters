@@ -1,6 +1,6 @@
 {
 	"$schema": "http://json-schema.org/draft-07/schema#",
-	"title": "ui-compile filter settings",
+	"title": "ui-compiler filter settings",
 	"type": "object",
 	"additionalProperties": false,
 	"properties": {

@@ -48,12 +48,12 @@
     "compileScreens": {
       "type": "boolean",
       "default": true,
-      "description": "Write one generated *.screen.tsx per page (plus the home index) under screensDir, for the ui-compile filter to bake into the pack. Off, the guide renders only through createGuide at runtime."
+      "description": "Write one generated *.screen.tsx per page (plus the home index) under screensDir, for the ui-compiler filter to bake into the pack. Off, the guide renders only through createGuide at runtime."
     },
     "screensDir": {
       "type": "string",
       "default": "BP/scripts/guides",
-      "description": "Where the generated screen modules go, relative to the Regolith temp directory. Must sit under the scripts folder the ui-compile filter scans."
+      "description": "Where the generated screen modules go, relative to the Regolith temp directory. Must sit under the scripts folder the ui-compiler filter scans."
     },
     "screenTitle": {
       "type": "string",

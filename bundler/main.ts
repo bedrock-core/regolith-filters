@@ -4,13 +4,13 @@ import { parseTsconfig, type TsConfigJson } from "get-tsconfig";
 import json5 from "json5";
 import path from "path";
 
-import { desugarJsxConditionals } from "../ui-compile/lib/sugar.ts";
+import { desugarJsxConditionals } from "../ui-compiler/lib/sugar.ts";
 
 /**
  * Rewrites React's conditional-rendering idioms in screen modules into carried
- * `visible` props — the same desugaring the ui-compile filter applies when it
+ * `visible` props — the same desugaring the ui-compiler filter applies when it
  * bakes a screen's shape, so the tree the runtime walks matches it. See
- * ui-compile/lib/sugar.ts.
+ * ui-compiler/lib/sugar.ts.
  */
 const jsxSugarPlugin: Plugin = {
   name: "jsx-conditional-sugar",

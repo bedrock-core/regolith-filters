@@ -1,4 +1,4 @@
-# ui-compile
+# ui-compiler
 
 A Regolith filter that compiles **screens written in JSX** into static JSON UI, and prepares
 everything the runtime half of [`@bedrock-core/ui`](https://github.com/bedrock-core/ui) needs to
@@ -180,7 +180,7 @@ yours.
 ## Installation
 
 ```bash
-regolith install github.com/bedrock-core/regolith-filters/ui-compile
+regolith install github.com/bedrock-core/regolith-filters/ui-compiler
 ```
 
 Add it to `config.json` **before** the `bundler` filter — it reads the screen sources the bundler
@@ -188,7 +188,7 @@ strips — and **after** `i18n` if you use it, so the character table is not car
 translation bundle:
 
 ```jsonc
-{ "filter": "ui-compile" }
+{ "filter": "ui-compiler" }
 ```
 
 No settings are required.

@@ -42,7 +42,7 @@ export function registerUiDefs({ uiDefsFile, files }: UiDefsRegistration): numbe
     return 0;
   }
 
-  const lines = ['\t\t// Emitted by the ui-compile filter.']
+  const lines = ['\t\t// Emitted by the ui-compiler filter.']
     .concat(missing.map(entry => `\t\t"${entry}",`))
     .join('\n');
 

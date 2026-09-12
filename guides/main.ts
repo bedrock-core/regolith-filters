@@ -78,7 +78,7 @@ const settings: Settings = Object.assign({}, defaults, argParsed);
 const cwd = process.cwd();
 
 // Every key this filter emits is prefixed with the addon's namespace, so it has
-// to be the same one i18n and ui-compile resolve: the `namespace` setting, or
+// to be the same one i18n and ui-compiler resolve: the `namespace` setting, or
 // the `core.register()` literals under BP/scripts.
 function resolveNamespace(): string {
   if (settings.namespace) {
@@ -324,7 +324,7 @@ function main(): void {
   for (const [locale, entries] of localeLang) writeLangSection(locale, entries);
   updateLanguagesJson(locales);
 
-  // One screen module per page plus the home index, for the ui-compile filter
+  // One screen module per page plus the home index, for the ui-compiler filter
   // to bake and the bundler to ship — a guide page is a screen of its own.
   if (settings.compileScreens) {
     const modules = guideScreenModules({

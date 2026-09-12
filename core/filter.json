@@ -1,5 +1,5 @@
 {
-	"description": "Runs the whole Bedrock Core filter stack — manifest, generator, guides, i18n, ui-compile, bundler — in the order they depend on.",
+	"description": "Runs the whole Bedrock Core filter stack — manifest, generator, guides, i18n, ui-compiler, bundler — in the order they depend on.",
 	"filters": [
 		{
 			"name": "Bedrock Core Stack",

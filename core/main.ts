@@ -7,7 +7,7 @@
 //   2. generator   — opt-in: templates become JSON before the scripts are bundled
 //   3. guides      — guide keys must land before i18n collects them
 //   4. i18n        — .lang files and the runtime bundle
-//   5. ui-compile  — screens bake against the keys i18n emitted
+//   5. ui-compiler  — screens bake against the keys i18n emitted
 //   6. bundler     — last: it inlines the generated bundles and strips the sources
 //
 // The order is fixed. A project that needs a step of its own between two stages
@@ -27,7 +27,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /** Every filter of this repository the stack runs, in the order it runs them. */
-const STAGES = ['manifest', 'generator', 'guides', 'i18n', 'ui-compile', 'bundler'] as const;
+const STAGES = ['manifest', 'generator', 'guides', 'i18n', 'ui-compiler', 'bundler'] as const;
 
 /**
  * The generator writes schema types into the project, so it runs only when the
