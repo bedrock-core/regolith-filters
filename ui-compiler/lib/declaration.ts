@@ -38,8 +38,6 @@ export interface Declaration extends ManifestFields {
   manifest?: ManifestFields;
   /** The config schema, scope by scope: what the shaped config screens are built from. */
   config?: unknown;
-  /** A page the addon built itself, in which case the build does not write one. */
-  page?: unknown;
 }
 
 /** What the read found: the declaration, and why it found none when it did not. */

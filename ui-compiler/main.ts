@@ -258,15 +258,13 @@ const generatedScreens: string[] = [];
 const manifest = { ...declaration, ...declaration?.manifest };
 
 /**
- * What the addon's page in the shared list draws, when the build is the one to
- * write it.
+ * What the addon's page in the shared list draws.
  *
- * Everything on the page is in the manifest, so an addon that declared one has
- * already said all of it. An addon that named its own `page` in the register
- * call means a screen it wrote, and that one is left alone.
+ * Everything on the page is in the manifest, so an addon that declared itself
+ * has already said all of it. Undefined when the manifest names no creator,
+ * pack name or version, which is an addon the list has nothing to draw for.
  */
-const pageInfo = declaration?.page === undefined
-  && manifest.creator !== undefined && manifest.packName !== undefined && manifest.version !== undefined
+const pageInfo = manifest.creator !== undefined && manifest.packName !== undefined && manifest.version !== undefined
   ? {
       packName: manifest.packName,
       version: manifest.version,
