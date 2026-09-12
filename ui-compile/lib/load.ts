@@ -103,6 +103,15 @@ export interface CompiledFormScreen {
   entries: readonly unknown[];
   /** What the build baked, registered beside the title for the runtime and `debug`. */
   snapshot: { shape: string; baked: readonly string[]; vis: readonly number[] };
+  /**
+   * Present when nothing about the screen can change: the value each entry is
+   * shown with and where each press leads. Such a screen ships as this row
+   * rather than as a component — there is nothing left for one to decide.
+   */
+  table?: {
+    values: readonly string[];
+    targets: readonly ({ to: string } | { back: true } | null)[];
+  };
   hasBackdrop: boolean;
 }
 

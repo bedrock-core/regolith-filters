@@ -966,6 +966,24 @@ if (forms.length > 0) {
     : specifier);
 
   const gallery = settings.gallery === true ? { alias: `Screen${forms.findIndex(screen => screen.name === GALLERY_NAME)}` } : undefined;
+
+  // A screen the build described in full ships as a ROW rather than as a module:
+  // no import, so its component, everything it renders and everything that data
+  // came from stay out of the addon. A screen with something live keeps its
+  // component, because only the component knows what to show next time.
+  const table = forms.flatMap((screen) => {
+    const described = screen.table;
+
+    return described === undefined
+      ? []
+      : [{
+          key: screenKey(screen.name),
+          title: screen.title,
+          values: described.values,
+          targets: described.targets,
+        }];
+  });
+
   const registrations = forms.map((screen, index) => {
     const from = formSources.get(screen.name);
     const library = typeof from === 'object';
@@ -982,8 +1000,9 @@ if (forms.length > 0) {
       key: screenKey(screen.name),
       title: screen.title,
       snapshot: screen.snapshot,
+      static: screen.table !== undefined,
     };
-  });
+  }).filter(entry => !entry.static || entry.alias === gallery?.alias);
 
   fs.mkdirSync(generatedDir, { recursive: true });
   fs.writeFileSync(
@@ -1002,16 +1021,25 @@ if (forms.length > 0) {
       '//',
       `// encoding ${runtime.windows.encodingMax} (window ${runtime.windows.encodingMin}..${runtime.windows.encodingMax}), vocabulary ${runtime.windows.vocabularyMax} (window ${runtime.windows.vocabularyMin}..${runtime.windows.vocabularyMax})`,
       '',
-      "import { addonReference, registerCompiledScreen, render, type AddonReference, type RenderOptions } from '@bedrock-core/ui';",
+      "import { addonReference, registerCompiledScreen, registerStaticScreens, render, type AddonReference, type RenderOptions } from '@bedrock-core/ui';",
       'import type { Player } from \'@minecraft/server\';',
       ...registrations.map(entry => `import ${entry.alias} from '${entry.source}';`),
+      '',
+      '/**',
+      ' * The screens nothing about which can change: every string baked, every press a link.',
+      ' * They are shown from this table — there is no component to render, and none ships.',
+      ' * It is also what this addon publishes, so any realm can show these screens.',
+      ' */',
+      `export const UI_REFERENCE = ${JSON.stringify(table, null, 2)} as const;`,
+      '',
+      'registerStaticScreens(UI_REFERENCE);',
       '',
       ...registrations.map(entry =>
         `registerCompiledScreen(${entry.alias}${entry.member === undefined ? '' : `[${JSON.stringify(entry.member)}]`}, `
         + `{ key: ${JSON.stringify(entry.key)}, title: ${JSON.stringify(entry.title)}, snapshot: ${JSON.stringify(entry.snapshot)} });`),
       '',
       '/** Every screen this addon compiled, by the key it is navigated with. */',
-      `export const SCREEN_KEYS = ${JSON.stringify(registrations.map(entry => entry.key), null, 2)} as const;`,
+      `export const SCREEN_KEYS = ${JSON.stringify(forms.map(screen => screenKey(screen.name)), null, 2)} as const;`,
       '',
       "/** The key of one of this addon's screens. */",
       'export type ScreenKey = typeof SCREEN_KEYS[number];',
@@ -1076,7 +1104,7 @@ if (forms.length > 0) {
     '',
     "declare module '@bedrock-core/ui-runtime' {",
     '  interface ScreenKeys {',
-    ...registrations.map(entry => `    ${JSON.stringify(entry.key)}: true;`),
+    ...forms.map(screen => `    ${JSON.stringify(screenKey(screen.name))}: true;`),
     '  }',
     '}',
     '',
