@@ -158,4 +158,4 @@ remark-mdx — both `.md` and `.mdx` run through the same MDX-enabled pipeline, 
   transparent to Regolith, which just spawns `node ./main.js`.
 - Generated `.lang` sections are delimited by `## <core:generated-guides:begin/end>` markers and
   re-running is idempotent; hand-written entries outside the markers are preserved.
-- `yarn test` runs the transform unit tests (vitest).
+- Unit tests run at the repository root (`npm test`).

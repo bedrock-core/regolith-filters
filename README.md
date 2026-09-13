@@ -10,10 +10,12 @@ regolith config resolvers --append github.com/bedrock-core/regolith-filters/reso
 
 ## Requirements
 
-**Node.js 22.18 or newer.** The filters are written in TypeScript and Regolith runs them
-directly — Node strips the types on the way in, so there is no build step and nothing compiled
-is committed. Types are checked separately with `npm run typecheck` at the root; that check
-emits nothing and is not part of a build.
+**Node.js 22.18 or newer.** Regolith runs the filters straight from TypeScript, so there is no
+build step. `npm run typecheck` and `npm test` both run at the root.
+
+Filters install with npm — Regolith runs `npm i` inside the filter folder and nothing else can
+be substituted. So each filter commits its `package-lock.json`, and test-only dependencies live
+at the root: Regolith installs a filter's `devDependencies` onto every consumer's machine.
 
 ## Filters
 

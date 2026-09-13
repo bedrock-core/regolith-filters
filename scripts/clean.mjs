@@ -2,14 +2,14 @@
  * Removes what an install or a build regenerates in this repository: the dependency trees of the
  * root and of every filter.
  *
- *   yarn clean
+ *   npm run clean
  *
  * There is no build step: Node runs the filters from TypeScript source, so nothing else here
  * is generated.
  *
  * Sources, configuration and anything git tracks are never touched.
  */
-import { existsSync, readdirSync, rmSync } from 'node:fs';
+import { readdirSync, rmSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 

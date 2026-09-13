@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "description": "Regolith filter that selects a manifest variant per profile and resolves its extends chain.",
   "type": "module",
-  "packageManager": "yarn@4.9.4",
   "engines": {
     "node": ">=22.18.0"
   },

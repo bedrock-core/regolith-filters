@@ -5,11 +5,13 @@
 	"description": "Type checking for the Bedrock Core Regolith filter set. Filters run their TypeScript directly on Node; nothing here is emitted or shipped.",
 	"scripts": {
 		"typecheck": "tsc",
-		"clean": "node scripts/clean.mjs"
+		"clean": "node scripts/clean.mjs",
+		"test": "vitest run"
 	},
 	"devDependencies": {
 		"@types/node": "^24.3.0",
 		"@types/picomatch": "^4.0.3",
-		"typescript": "^5.9.2"
+		"typescript": "^5.9.2",
+		"vitest": "^4.1.5"
 	}
 }
