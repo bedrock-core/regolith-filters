@@ -1,10 +1,11 @@
 // Reads what an addon declares, by evaluating its entry with the register call
 // intercepted.
 //
-// `core.register({ ... })` is where an addon says what it is: its manifest, its
-// config schema, what it shares and what it emits. The bedrock-core screens an
-// addon gets are shaped from that, so the build reads the declaration rather
-// than asking the author to repeat it anywhere.
+// `core.register({ ... })` is where an addon says what it is: its manifest, and
+// a declaration per subsystem — the config it declares, what it shares, what it
+// emits. The bedrock-core screens an addon gets are shaped from that, so the
+// build reads the declaration rather than asking the author to repeat it
+// anywhere.
 //
 // The runtime itself is the REAL one — `core` is a singleton the addon and this
 // module import alike, so replacing its `register` before the entry runs is all
@@ -40,6 +41,19 @@ export interface Declaration extends ManifestFields {
   config?: unknown;
 }
 
+/**
+ * The schema inside a config declaration.
+ *
+ * `config: config(definition)` hands `register()` an installer, not a schema; the definition the
+ * addon wrote rides along on it, and that is what the screens are shaped from. Anything else in the
+ * `config` field is not a declaration, so the runtime ignores it and so does the build.
+ */
+function definitionOf(value: unknown): unknown {
+  return typeof value === 'object' && value !== null && 'definition' in value
+    ? (value as { definition: unknown }).definition
+    : undefined;
+}
+
 /** What the read found: the declaration, and why it found none when it did not. */
 export interface ReadResult {
   declaration?: Declaration;
@@ -69,7 +83,7 @@ export interface ReadDeclarationOptions {
 export async function readDeclaration(
   { entryPath, cacheDir, jsxImportSource, aliases = {} }: ReadDeclarationOptions,
 ): Promise<ReadResult> {
-  return evaluateEntry<ReadResult>({
+  const read = await evaluateEntry<ReadResult>({
     contents: `import { core } from '@bedrock-core/server-runtime';
 
 const captured = {};
@@ -111,4 +125,8 @@ export default captured.options === undefined ? { failure } : { declaration: cap
     },
     key: `declaration:${entryPath}`,
   });
+
+  if (read.declaration === undefined) { return read; }
+
+  return { ...read, declaration: { ...read.declaration, config: definitionOf(read.declaration.config) } };
 }

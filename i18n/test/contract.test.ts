@@ -2,7 +2,7 @@
 // {{var}} templates to positional %N$s when writing .lang files; the runtime
 // package performs the identical conversion in toTranslationTables() when
 // publishing to replicated state. Both test suites pin the SAME table —
-// ui/packages/i18n/src/__tests__/contract.test.ts carries the counterpart —
+// server/packages/i18n/src/__tests__/contract.test.ts carries the counterpart —
 // so a drift on either side fails a build instead of landing arguments in
 // wrong placeholders.
 
