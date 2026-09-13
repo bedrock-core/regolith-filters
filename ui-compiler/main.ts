@@ -324,7 +324,7 @@ if (pageInfo !== undefined || declaration?.config !== undefined) {
       ...declaration?.config === undefined ? [] : ['configScreens', 'registerConfigScreens'],
       ...declared.length === 0 ? [] : ['registerDeclared'],
     ].join(', ')} } from '@bedrock-core/config';`,
-    ...declaration?.config === undefined ? [] : ['import type { ConfigDefinition } from \'@bedrock-core/server-runtime\';'],
+    ...declaration?.config === undefined ? [] : ['import type { ConfigDefinition } from \'@bedrock-core/config/server\';'],
     ...declaredBundles.map(bundle => `import ${bundle.name} from '${bundle.from}';`),
     '',
     ...page,
