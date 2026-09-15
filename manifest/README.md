@@ -50,7 +50,7 @@ packs/BP/manifest.test.json   extends it, adds @minecraft/server-gametest
   "extends": "./manifest.json",
   "header": { "name": "DEV pack" },
   "dependencies": [
-    { "uuid": "5e0e2a5b-74e2-4dd6-9c11-8a4f3f6b2d90", "version": [0, 1, 0] },
+    { "uuid": "5e0e2a5b-74e2-4dd6-9c11-8a4f3f6b2d90", "version": "0.1.0" },
     { "module_name": "@minecraft/server", "version": "2.9.0-beta" },
     { "module_name": "@minecraft/server-gametest", "version": "1.0.0-beta" }
   ]
@@ -113,6 +113,18 @@ variant can't ride along into a release. `manifest.json` itself, and files that 
 
 Nothing is written until every entry has resolved and validated, so a broken `extends` chain
 leaves the workspace exactly as it was.
+
+## Validation
+
+A resolved manifest must be `format_version` 3 — the number, not the string `"3"` — because that
+is the only version this filter accepts. Version 3 also drops the old `[major, minor, patch]`
+array form everywhere it used to appear: `header.version`, `header.min_engine_version`,
+`header.base_game_version` (when present), and every `modules[].version` and
+`dependencies[].version` must be SemVer strings, e.g. `"1.0.0"`. `metadata.authors` must be a
+non-empty array of strings — the engine rejects a version 3 manifest without one.
+
+These are exactly the shapes a v2-authored base or a careless variant produces, so the check runs
+on the resolved result, after `extends` and the merge, and names the failing path.
 
 ## Non-goals
 

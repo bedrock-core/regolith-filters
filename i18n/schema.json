@@ -22,8 +22,8 @@
 		},
 		"vanilla": {
 			"type": "boolean",
-			"default": true,
-			"description": "Generate the $.vanilla.* key tree and bundle the vanilla strings your scripts reference. Vanilla strings are never emitted into the RP either way."
+			"default": false,
+			"description": "Generate the $.vanilla.* key tree and bundle the vanilla strings your scripts reference. Vanilla strings are never emitted into the RP either way. Off by default because it fetches and diffs the vanilla lang files on every build."
 		},
 		"vanillaLangUrlTemplate": {
 			"type": "string",

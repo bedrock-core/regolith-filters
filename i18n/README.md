@@ -72,7 +72,7 @@ bundle's metadata.
 | `BP/texts/languages.json` | your pack | written alongside, so the game knows which languages the BP declares |
 | `data/i18n/i18n.generated.json` | Regolith temp | per-locale tables, interpolation arg order, namespace, and the `.lang` passthrough — inlined into the script bundle |
 | `packs/data/i18n/i18n.generated.d.ts` | your project (commit it) | types the bundle module: your resources at the root, libraries and `vanilla` grafted on |
-| `packs/data/i18n/vanilla.generated.d.ts` | your project (commit it) | the vanilla key tree, so `$.vanilla.*` autocompletes |
+| `packs/data/i18n/vanilla.generated.d.ts` | your project (commit it) | with `vanilla: true`, the vanilla key tree, so `$.vanilla.*` autocompletes |
 
 The `.lang` files are written into the pack because Bedrock reads them at runtime. The generated
 JSON stays in Regolith's temp workspace and is never synced back — the bundler resolves the
@@ -170,7 +170,8 @@ library's own translation fills the gap).
 
 ## Vanilla strings
 
-Always available for autocompletion under `$.vanilla.*` — the full vanilla tree (~10k keys) is
+Opt in with `vanilla: true`. Off by default, because it fetches and diffs the vanilla `.lang`
+files on every build. Once on, `$.vanilla.*` autocompletes — the full vanilla tree (~10k keys) is
 generated into `vanilla.generated.d.ts`. Never emitted into your RP: the client already ships
 those strings, so re-adding them would only bloat the pack.
 
@@ -179,8 +180,7 @@ runtime bundle **only for the keys your scripts actually reference** — the fil
 bundler, so it scans the sources under `BP/scripts` (plus each discovered library's `src/`) for
 string literals and for `$.vanilla.` selector chains. A key assembled at
 runtime (`'item.' + id + '.name'`) is not found: `key()`/`raw()` still resolve on the client,
-but `t()` falls back to the raw key and measurement for that one string is approximate. Set
-`vanilla: false` to skip the fetch and the branch entirely.
+but `t()` falls back to the raw key and measurement for that one string is approximate.
 
 Vanilla `.lang` content is fetched per locale from Mojang's `bedrock-samples` and cached in
 `.regolith/cache/i18n/` (see `cacheMaxAgeHours`).
@@ -267,7 +267,7 @@ No settings are required when the `core.register` scan succeeds.
 | `namespace` | `string` | derived | Overrides the `core.register` scan; **required** only when the scan fails |
 | `defaultLocale` | `string` | `"en_US"` | The locale whose file defines the shape and types |
 | `sourceDir` | `string` | `"data/i18n"` | Where the per-locale resource modules live, relative to the Regolith temp workspace |
-| `vanilla` | `boolean` | `true` | Generate `$.vanilla.*` types and bundle used vanilla strings |
+| `vanilla` | `boolean` | `false` | Generate `$.vanilla.*` types and bundle used vanilla strings |
 | `vanillaLangUrlTemplate` | `string` | bedrock-samples URL | Where vanilla `.lang` is fetched from — `{locale}` is replaced |
 | `cacheMaxAgeHours` | `number` | `24` | Hours before a locale's cached vanilla `.lang` is stale |
 | `strict` | `boolean` | `true` | Fail the build on check violations instead of warning |

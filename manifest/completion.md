@@ -11,3 +11,6 @@ Settings:
 key, arrays replace outright — and the resolved result is written as `manifest.json`. Every
 variant is then deleted from the temp workspace, so the gametest build's beta modules can never
 reach a release pack.
+
+The resolved manifest must be `format_version` 3: every version field is a SemVer string, never
+the old `[major, minor, patch]` array, and `metadata.authors` is a non-empty array of strings.

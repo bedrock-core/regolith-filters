@@ -12,22 +12,22 @@ import { afterEach, describe, it } from 'node:test';
 const MAIN = path.join(import.meta.dirname, '..', 'main.ts');
 
 const BASE = {
-  format_version: 2,
+  format_version: 3,
   header: {
     name: 'pack.name',
     uuid: '8f2f4e21-6a3d-4c58-b0aa-51e9d3a7c402',
-    version: [0, 1, 0],
-    min_engine_version: [1, 26, 30],
+    version: '0.1.0',
+    min_engine_version: '1.26.30',
   },
   modules: [
-    { type: 'data', uuid: '27c15c3e-98be-4dcf-8f1e-b20d7a4e6631', version: [0, 1, 0] },
-    { type: 'script', language: 'javascript', entry: 'scripts/main.js', uuid: 'c4a4708e', version: [0, 1, 0] },
+    { type: 'data', uuid: '27c15c3e-98be-4dcf-8f1e-b20d7a4e6631', version: '0.1.0' },
+    { type: 'script', language: 'javascript', entry: 'scripts/main.js', uuid: 'c4a4708e', version: '0.1.0' },
   ],
   dependencies: [
-    { uuid: '5e0e2a5b-74e2-4dd6-9c11-8a4f3f6b2d90', version: [0, 1, 0] },
+    { uuid: '5e0e2a5b-74e2-4dd6-9c11-8a4f3f6b2d90', version: '0.1.0' },
     { module_name: '@minecraft/server', version: '2.8.0' },
   ],
-  metadata: { product_type: 'addon' },
+  metadata: { product_type: 'addon', authors: ['DrAv0011'] },
 };
 
 /** What a failed `execFileSync` carries back from the child process. */
@@ -100,7 +100,7 @@ describe('selecting a variant', () => {
     // header: the child's key wins, every other key survives.
     assert.equal(result.header.name, 'DEV pack');
     assert.equal(result.header.uuid, BASE.header.uuid);
-    assert.deepEqual(result.header.min_engine_version, [1, 26, 30]);
+    assert.equal(result.header.min_engine_version, '1.26.30');
 
     // dependencies: replaced wholesale, so the base's pack dependency is gone by design.
     assert.deepEqual(result.dependencies, [
@@ -110,7 +110,7 @@ describe('selecting a variant', () => {
 
     // untouched keys come straight from the base.
     assert.deepEqual(result.modules, BASE.modules);
-    assert.deepEqual(result.metadata, { product_type: 'addon' });
+    assert.deepEqual(result.metadata, BASE.metadata);
     assert.equal(result.extends, undefined);
   });
 
@@ -241,7 +241,7 @@ describe('failures', () => {
 
     const output = runFails({ manifestPath: 'BP/manifest.test.json' });
 
-    assert.match(output, /"format_version" is missing/);
+    assert.match(output, /"format_version" must be 3/);
     assert.match(output, /"header.uuid" is missing/);
   });
 
@@ -281,5 +281,63 @@ describe('failures', () => {
     }
 
     assert.match(output, /ROOT_DIR environment variable not set/);
+  });
+});
+
+describe('format_version 3', () => {
+  it('rejects a v2 manifest', () => {
+    workspace({
+      'BP/manifest.json': {
+        format_version: 2,
+        header: { name: 'pack.name', uuid: BASE.header.uuid, version: [0, 1, 0], min_engine_version: [1, 26, 30] },
+        metadata: { product_type: 'addon', authors: ['DrAv0011'] },
+      },
+    });
+
+    assert.match(runFails(), /"format_version" must be 3/);
+  });
+
+  it('rejects format_version as a string', () => {
+    workspace({ 'BP/manifest.json': { ...BASE, format_version: '3' } });
+
+    assert.match(runFails(), /"format_version" must be 3/);
+  });
+
+  it('rejects an array-valued version wherever one appears', () => {
+    workspace({
+      'BP/manifest.json': {
+        ...BASE,
+        header: { ...BASE.header, version: [0, 1, 0], base_game_version: [1, 21, 0] },
+        modules: [{ ...BASE.modules[0], version: [0, 1, 0] }],
+        dependencies: [{ ...BASE.dependencies[0], version: [0, 1, 0] }],
+      },
+    });
+
+    const output = runFails();
+
+    assert.match(output, /"header\.version" must be a SemVer string in a version 3 manifest, e\.g\. "1\.0\.0"/);
+    assert.match(output, /"header\.base_game_version" must be a SemVer string/);
+    assert.match(output, /"modules\[0\]\.version" must be a SemVer string/);
+    assert.match(output, /"dependencies\[0\]\.version" must be a SemVer string/);
+  });
+
+  it('rejects a manifest with no metadata.authors', () => {
+    workspace({ 'BP/manifest.json': { ...BASE, metadata: { product_type: 'addon' } } });
+
+    assert.match(runFails(), /"metadata\.authors" must be a non-empty array of strings/);
+  });
+
+  it('rejects an empty metadata.authors', () => {
+    workspace({ 'BP/manifest.json': { ...BASE, metadata: { product_type: 'addon', authors: [] } } });
+
+    assert.match(runFails(), /"metadata\.authors" must be a non-empty array of strings/);
+  });
+
+  it('accepts a valid v3 manifest', () => {
+    workspace({ 'BP/manifest.json': BASE });
+
+    run();
+
+    assert.deepEqual(read('BP/manifest.json'), BASE);
   });
 });

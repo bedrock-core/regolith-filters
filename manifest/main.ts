@@ -10,6 +10,11 @@
  * objects merge key by key, arrays and scalars in the child replace the parent's value outright,
  * and a relative `extends` resolves against the file that declares it.
  *
+ * The resolved manifest must be format_version 3: every version field (`header.version`,
+ * `header.min_engine_version`, `header.base_game_version`, each module's and dependency's
+ * `version`) must be a SemVer string rather than the old `[major, minor, patch]` array, and
+ * `metadata.authors` must be a non-empty array of strings.
+ *
  * Everything happens in Regolith's temp workspace (the cwd), never in the project itself.
  */
 
@@ -174,16 +179,57 @@ function resolveChain(file: string, ancestors: string[]): Document {
   return merge(resolveChain(parentFile, [...ancestors, abs]), doc) as Document;
 }
 
+/**
+ * Version 3 dropped the `[major, minor, patch]` array form everywhere it used to appear —
+ * `header.version`, `header.min_engine_version`, `header.base_game_version`, every
+ * `modules[].version` and `dependencies[].version` must all be SemVer strings now.
+ */
+function checkVersionString(value: unknown, path: string, problems: string[]): void {
+  if (value === undefined || typeof value === "string") return;
+  problems.push(`"${path}" must be a SemVer string in a version 3 manifest, e.g. "1.0.0"`);
+}
+
 /** Catch the merges that produce a manifest Minecraft would reject outright. */
 function validate(doc: Document, file: string): void {
   const problems: string[] = [];
 
-  if (doc.format_version === undefined) problems.push('"format_version" is missing');
-  if (!isPlainObject(doc.header)) problems.push('"header" is missing');
-  else if (!doc.header.uuid) problems.push('"header.uuid" is missing');
-  if (doc.modules !== undefined && !Array.isArray(doc.modules)) problems.push('"modules" must be an array');
-  if (doc.dependencies !== undefined && !Array.isArray(doc.dependencies)) {
-    problems.push('"dependencies" must be an array');
+  if (doc.format_version !== 3) {
+    problems.push(
+      '"format_version" must be 3; this filter requires a version 3 manifest, where every version is a SemVer string, e.g. "1.0.0"'
+    );
+  }
+
+  if (!isPlainObject(doc.header)) {
+    problems.push('"header" is missing');
+  } else {
+    if (!doc.header.uuid) problems.push('"header.uuid" is missing');
+    checkVersionString(doc.header.version, "header.version", problems);
+    checkVersionString(doc.header.min_engine_version, "header.min_engine_version", problems);
+    checkVersionString(doc.header.base_game_version, "header.base_game_version", problems);
+  }
+
+  if (doc.modules !== undefined) {
+    if (!Array.isArray(doc.modules)) problems.push('"modules" must be an array');
+    else {
+      doc.modules.forEach((entry, index) => {
+        if (isPlainObject(entry)) checkVersionString(entry.version, `modules[${index}].version`, problems);
+      });
+    }
+  }
+
+  if (doc.dependencies !== undefined) {
+    if (!Array.isArray(doc.dependencies)) problems.push('"dependencies" must be an array');
+    else {
+      doc.dependencies.forEach((entry, index) => {
+        if (isPlainObject(entry)) checkVersionString(entry.version, `dependencies[${index}].version`, problems);
+      });
+    }
+  }
+
+  const authors = isPlainObject(doc.metadata) ? doc.metadata.authors : undefined;
+
+  if (!Array.isArray(authors) || authors.length === 0 || !authors.every(author => typeof author === "string")) {
+    problems.push('"metadata.authors" must be a non-empty array of strings');
   }
 
   if (problems.length) fail(`Resolved manifest from ${relative(file)} is not valid`, ...problems);

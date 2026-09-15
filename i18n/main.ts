@@ -98,7 +98,7 @@ const defaults: Settings = {
   namespace: '',
   defaultLocale: 'en_US',
   sourceDir: 'data/i18n',
-  vanilla: true,
+  vanilla: false,
   vanillaLangUrlTemplate: VANILLA_LANG_URL_TEMPLATE,
   cacheMaxAgeHours: 24,
   strict: true,
