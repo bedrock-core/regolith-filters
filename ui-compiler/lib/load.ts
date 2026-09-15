@@ -31,17 +31,6 @@ export const jsxSugarPlugin: Plugin = {
 
 import type { Document } from './hooks.ts';
 
-/** What `compileScreen` hands back for a chest screen. */
-/** A screen drawn as faces alone, mounted on the action form for the gallery. */
-export interface Preview {
-  /** The JSON UI namespace: `<screen namespace>__preview`. */
-  namespace: string;
-  /** The title the runtime opens it with, and what its gate reads. */
-  title: string;
-  document: Document;
-  hasBackdrop: boolean;
-}
-
 /** What the form router needs of a screen it gates: its name, its namespace, and whether a backdrop goes behind it. */
 export interface RoutedFormScreen {
   name: string;
@@ -58,6 +47,7 @@ export interface EmbedPlacement {
   readonly offset: readonly [number, number];
 }
 
+/** What `compileScreen` hands back for a chest screen. */
 export interface CompiledScreen {
   /** The screen's name, from its file name. */
   name: string;
@@ -68,13 +58,11 @@ export interface CompiledScreen {
   /** Type of the entity the screen opens from. */
   entity: string;
   document: Document;
-  /** The screen as faces alone: what the gallery draws. */
+  /** The screen as faces alone, before any host stood its mechanisms in. */
   face: { document: Document };
   /** The namespace of the addon's shared faces, and the looks this screen contributes to it. */
   facesNamespace: string;
   faces: Record<string, unknown>;
-  /** The screen as faces alone under its preview namespace, for the gallery. */
-  preview: Preview;
   allocation: { sentinels: number; drawn: number; channels: number; size: number };
   hasBackdrop: boolean;
   /** Whether any text is live, i.e. decoded through the character table. */
@@ -92,13 +80,11 @@ export interface CompiledFormScreen {
   marker?: string;
   embed?: EmbedPlacement;
   document: Document;
-  /** The screen as faces alone: what the gallery draws. */
+  /** The screen as faces alone, before any host stood its mechanisms in. */
   face: { document: Document };
   /** The namespace of the addon's shared faces, and the looks this screen contributes to it. */
   facesNamespace: string;
   faces: Record<string, unknown>;
-  /** The screen as faces alone under its preview namespace, for the gallery. */
-  preview: Preview;
   /** Every entry the runtime emits, in order. The nth is `response.selection` n. */
   entries: readonly unknown[];
   /** What the build baked, registered beside the title for the runtime and `debug`. */

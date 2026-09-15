@@ -27,7 +27,7 @@ One entry per profile then replaces the six:
             "filter": "core",
             "settings": {
               "shared": { "namespace": "drav0011_economy" },
-              "ui-compiler": { "screens": ["@bedrock-core/config/compiled"] },
+              "ui-compiler": { "screens": ["./BP/scripts/screens/index.ts"] },
               "bundler": { "debug": true }
             }
           }
@@ -40,7 +40,7 @@ One entry per profile then replaces the six:
             "settings": {
               "shared": { "namespace": "drav0011_economy" },
               "manifest": { "manifestPath": "BP/manifest.test.json" },
-              "ui-compiler": { "screens": ["@bedrock-core/config/compiled"] },
+              "ui-compiler": { "screens": ["./BP/scripts/screens/index.ts"] },
               "bundler": { "debug": true, "tsConfigPath": "tsconfig.test.json" }
             }
           }
@@ -55,7 +55,7 @@ One entry per profile then replaces the six:
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| `shared` | object | `{}` | Merged into every stage. The addon's `namespace` belongs here; a stage that does not read a key ignores it. |
+| `shared` | object | `{}` | Merged into every stage. The addon's `namespace` belongs here, and so does `pretty` — absent, every file the stack generates is minified; `{ "indent": "tab" }` lays them all out. A stage that does not read a key ignores it. |
 | `manifest`, `guides`, `i18n`, `ui-compiler`, `bundler` | object \| `false` | `{}` | Settings for that stage, merged over `shared`. `false` skips the stage. |
 | `generator` | object \| `true` | off | The generator runs only when this key is present — it writes schema types into the project, so a project opts in. `true` runs it with its defaults. |
 

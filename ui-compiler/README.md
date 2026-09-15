@@ -84,8 +84,8 @@ under the `ui-compiler` key of its settings.
 | --- | --- | --- | --- |
 | `namespace` | `string` | declared | The addon's namespace: it prefixes every screen's JSON UI namespace and names the router files. Lowercase `a-z`, `0-9` and `_`. Left unset, it is the `creator` and `pack` of the manifest declared in `core.register()` |
 | `stamp` | `boolean` | `false` | Draw a build stamp at the HUD's top-left: a short hash of every compiled screen plus the build clock. For a development profile |
-| `gallery` | `boolean` | `false` | Write every screen's preview — the screen as faces alone, no host behind it — and a gallery screen that opens each, reached as `openGallery(player)` from `@bedrock-core/generated/ui`. For a development profile: the place a screen is looked at before any host serves it |
 | `screens` | `string[]` | `[]` | Further modules whose default export is a record of screens to compile, for a library the addon's declaration does not already name. Each export key names the screen |
+| `pretty` | `false \| { indent?, size? }` | `false` | How every emitted JSON UI file is laid out. Absent or `false` writes it minified. An object lays it out: `indent` is `"tab"` or `"space"` (spaces when omitted), `size` the characters per level (2 for spaces, 1 for tabs when omitted). Laid out, each file is also headed with the comment saying it is generated; minified, it is headerless too — indentation is a large share of a compiled screen's bytes |
 
 Every path — screens under `BP/scripts`, output under `RP/ui/core-ui/screens`, the chest hook at
 `RP/ui/chest_screen.json`, entities under `BP/entities`, texts under `RP/texts` — is what the
@@ -116,8 +116,6 @@ sources like any other script.
 | --- | --- | --- |
 | `RP/ui/core-ui/screens/<namespace>/<name>.json` | Regolith temp | the compiled screen — one JSON UI namespace, `<namespace>_<name>`, per screen, whichever kind it is. Under the addon's own folder, because a resource pack file is replaced rather than merged by a higher pack's file at the same path |
 | `RP/ui/core-ui/screens/<namespace>/faces.json` | Regolith temp | the looks every screen of the addon shares, under `<namespace>_faces`: no bindings, one definition per distinct look however many screens draw it |
-| `RP/ui/core-ui/screens/<namespace>/<name>.preview.json` | Regolith temp, `gallery` only | the screen as faces alone under `<namespace>_<name>__preview`, gated on its own title |
-| `RP/ui/core-ui/screens/<namespace>/gallery.json` | Regolith temp, `gallery` only | a compiled screen listing every screen of the addon; a press opens that screen's preview. Its source is written to `BP/scripts/gallery/gallery.screen.tsx` and compiled last |
 | `RP/ui/core-ui/screens/<namespace>/core_build.json` | Regolith temp, `stamp` only | the stamp label the HUD hook mounts |
 | `RP/ui/core-ui/screens/<namespace>_router.json` | Regolith temp | the addon's chest router: the addon's root, and one host per container screen, each gated on its layout key |
 | `RP/ui/core-ui/screens/<namespace>_forms.json` | Regolith temp | the addon's form router: one gated host per compiled form screen, picked by the title the runtime opens it with |
@@ -128,8 +126,8 @@ sources like any other script.
 | `RP/ui/_ui_defs.json` | Regolith temp (edited or new copy) | every file above registered, or the game never loads them |
 | `RP/texts/<locale>.lang` | Regolith temp (appended) | the character table `<Text maxLength>` decodes through; only written when a container screen has live text |
 | `BP/entities/<file>.json` | Regolith temp (edited copy) | the entity each container screen names — see [Entities](#entities) |
-| `data/ui/declared.screens.ts` | Regolith temp | the screens that follow from `core.register()`: the addon's page in the shared list, drawn from its manifest, and one config screen per section of its schema |
-| `data/ui/ui.generated.ts` | Regolith temp | one `registerCompiledScreen` call per compiled form, the `UI_REFERENCE` table of the screens nothing about which can change, `SCREEN_KEYS`, `uiReference()` and `openGallery(player)` |
+| `data/ui/declared.screens.ts` | Regolith temp | the screens that follow from `core.register()`: what each installed app shapes from its declaration and the manifest — the addon's page in the catalog, one config screen per section of its schema |
+| `data/ui/ui.generated.ts` | Regolith temp | one `registerCompiledScreen` call per compiled form, the `UI_REFERENCE` table of the screens nothing about which can change, `SCREEN_KEYS` and `uiReference()` |
 | `<dataPath>/ui/screens.generated.d.ts` | **the project** | the same screen keys, declared where the editor reads them: the generated module above only exists inside a Regolith run, so without this `navigate()` takes any string. Written only when the content changed |
 
 The filter adds `import '@bedrock-core/generated/ui';` to the workspace copy of the script entry
@@ -192,7 +190,6 @@ The filter stops the build rather than warning past a problem:
 - A container screen naming an entity that is not under `BP/entities`, or two naming the same
   entity — one entity opens one screen.
 - A `screens` module that default-exports no screens.
-- `gallery: true` with a screen of the addon already called `gallery`.
 - Anything the compiler refuses, relayed in its own words: a control the host has no mechanism
   for, content past the 320 × 210 canvas, a `<Container>` with no `entity`, a `<Text>` that
   changes with state but is baked into the layout or into a button's face, a host that moved a

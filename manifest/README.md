@@ -75,6 +75,7 @@ TypeScript's, exactly:
 | setting | default | meaning |
 | --- | --- | --- |
 | `manifestPath` | `"BP/manifest.json"` | Manifest to resolve. Pass an array to resolve one per pack. |
+| `pretty` | `false` | How the resolved manifest is laid out. Absent or `false` writes it minified; `{ "indent": "tab" }` or `{ "indent": "space", "size": 4 }` lays it out. |
 
 Paths are relative to Regolith's temp workspace; a leading `packs/` is stripped, so
 `packs/BP/manifest.test.json` and `BP/manifest.test.json` both work.

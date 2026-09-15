@@ -91,6 +91,7 @@ openGuide('my_addon', player, { manifest: guides });
 | `manifestPath` | `data/guides/guides.generated.json` | Manifest output path (temp workspace; consumed by the bundler, never synced back) |
 | `maxCodeLineBytes` | `60` | Hard-wrap budget for code-block lines (raw text, 80-byte cap) |
 | `strictLocales` | `false` | Fail instead of warn on cross-locale key drift |
+| `pretty` | `false` | How the guide manifest and `languages.json` are laid out. Absent or `false` writes both minified; `{ "indent": "tab" }` or `{ "indent": "space", "size": 4 }` lays them out |
 
 ## Authoring
 

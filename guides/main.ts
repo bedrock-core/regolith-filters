@@ -41,6 +41,31 @@ const projectRoot = requireProjectRoot();
 
 // ─── Settings ─────────────────────────────────────────────────────────────────
 
+// ─── Output layout ────────────────────────────────────────────────────────────
+// The same in every filter of this repository: generated JSON is minified unless
+// a profile asks for it laid out, and then `indent` and `size` say how.
+
+/** How generated JSON is laid out. Absent or `false` writes it minified. */
+interface Pretty {
+  /** 'tab' or 'space'; spaces when omitted. */
+  indent?: 'tab' | 'space';
+  /** Characters per level: 2 spaces or 1 tab when omitted. */
+  size?: number;
+}
+
+/** The indent `JSON.stringify` takes, or `undefined` for minified output. */
+function indentOf(pretty: Pretty | false | undefined): string | undefined {
+  if (pretty === undefined || pretty === false) return undefined;
+  const tab = pretty.indent === 'tab';
+  return (tab ? '\t' : ' ').repeat(Math.max(1, Math.trunc(pretty.size ?? (tab ? 1 : 2))));
+}
+
+/** A generated JSON file: laid out and newline-terminated when `pretty` says so, minified otherwise. */
+function jsonText(value: unknown, pretty: Pretty | false | undefined): string {
+  const indent = indentOf(pretty);
+  return indent === undefined ? JSON.stringify(value) : `${JSON.stringify(value, null, indent)}\n`;
+}
+
 interface Settings {
   /** Override for the scan; empty resolves it from `core.register()`. */
   namespace: string;
@@ -55,6 +80,8 @@ interface Settings {
   screensDir: string;
   screenTitle: string;
   componentsModule: string;
+  /** How the JSON this filter emits is laid out. Absent or `false` writes every generated file minified. */
+  pretty?: Pretty | false;
 }
 
 const defaults: Settings = {
@@ -74,6 +101,9 @@ const defaults: Settings = {
 
 const argParsed: Partial<Settings> = process.argv[2] ? JSON.parse(process.argv[2]) : {};
 const settings: Settings = Object.assign({}, defaults, argParsed);
+
+/** Every JSON file this filter writes, laid out as the profile asked. */
+const stringify = (value: unknown): string => jsonText(value, settings.pretty);
 
 const cwd = process.cwd();
 
@@ -206,7 +236,7 @@ function updateLanguagesJson(locales: string[]): void {
   }
   const merged = [...new Set([...existing, ...locales])];
   if (merged.length !== existing.length) {
-    fs.writeFileSync(languagesPath, JSON.stringify(merged, null, '\t') + '\n', 'utf-8');
+    fs.writeFileSync(languagesPath, stringify(merged), 'utf-8');
     console.log(`✅ RP/texts/languages.json — ${merged.length} languages`);
   }
 }
@@ -318,7 +348,7 @@ function main(): void {
   // ── Write outputs ─────────────────────────────────────────────────────────
   const manifestPath = path.join(cwd, settings.manifestPath);
   fs.mkdirSync(path.dirname(manifestPath), { recursive: true });
-  fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, '\t'), 'utf-8');
+  fs.writeFileSync(manifestPath, stringify(manifest), 'utf-8');
   console.log(`✅ ${settings.manifestPath} — ${Object.keys(manifest.pages).length} pages`);
 
   for (const [locale, entries] of localeLang) writeLangSection(locale, entries);

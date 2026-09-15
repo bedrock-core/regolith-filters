@@ -9,10 +9,36 @@ import { ensureSchemaPackage, PACKAGE_NAME } from "./lib/schemas.ts";
 import { compileCatalog, indexDtsText, globalsDtsText, TYPES_REVISION } from "./lib/dts.ts";
 
 /** Settings Regolith passes as argv[2]; include/exclude are rewritten below. */
+// ─── Output layout ────────────────────────────────────────────────────────────
+// The same in every filter of this repository: generated JSON is minified unless
+// a profile asks for it laid out, and then `indent` and `size` say how.
+
+/** How generated JSON is laid out. Absent or `false` writes it minified. */
+interface Pretty {
+  /** "tab" or "space"; spaces when omitted. */
+  indent?: "tab" | "space";
+  /** Characters per level: 2 spaces or 1 tab when omitted. */
+  size?: number;
+}
+
+/** The indent `JSON.stringify` takes, or `undefined` for minified output. */
+function indentOf(pretty: Pretty | false | undefined): string | undefined {
+  if (pretty === undefined || pretty === false) return undefined;
+  const tab = pretty.indent === "tab";
+  return (tab ? "\t" : " ").repeat(Math.max(1, Math.trunc(pretty.size ?? (tab ? 1 : 2))));
+}
+
+/** A generated JSON file: laid out and newline-terminated when `pretty` says so, minified otherwise. */
+function jsonText(value: unknown, pretty: Pretty | false | undefined): string {
+  const indent = indentOf(pretty);
+  return indent === undefined ? JSON.stringify(value) : `${JSON.stringify(value, null, indent)}\n`;
+}
+
 interface Settings {
   include: string[];
   exclude: string[];
-  pretty: boolean;
+  /** How generated JSON is laid out. Absent or `false` writes it minified. */
+  pretty?: Pretty | false;
   types: boolean;
   schemaVersion: string;
   typesDir: string | null;
@@ -42,7 +68,6 @@ const projectRoot = requireProjectRoot();
 const defaults: Settings = {
   include: ["BP/**/*.ts", "RP/**/*.ts"],
   exclude: ["BP/scripts/**", "**/*.d.ts"],
-  pretty: true,
   types: true,
   schemaVersion: "latest",
   typesDir: null,
@@ -230,7 +255,7 @@ async function processTsFile(file: string): Promise<number> {
   // Single format -> same name as file
   if (def && typeof def === "object" && !Array.isArray(def)) {
     const outFile = path.join(dir, `${base}.json`);
-    const json = settings.pretty ? JSON.stringify(def, null, 4) : JSON.stringify(def);
+    const json = jsonText(def, settings.pretty);
 
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(outFile, json);
@@ -284,7 +309,7 @@ async function processTsFile(file: string): Promise<number> {
       }
 
       const outFile = path.join(dir, finalName);
-      const json = settings.pretty ? JSON.stringify(data, null, 2) : JSON.stringify(data);
+      const json = jsonText(data, settings.pretty);
 
       fs.mkdirSync(dir, { recursive: true });
       fs.writeFileSync(outFile, json);

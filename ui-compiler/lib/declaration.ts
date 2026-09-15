@@ -33,25 +33,58 @@ export interface ManifestFields {
   thumbnail?: string;
 }
 
+/** One bedrock-core app the addon installed, as its declaration describes it to the build. */
+export interface DeclaredApp {
+  /** The app's name, from the `app` tag on its declaration: `catalog`, `config`, `guide`. */
+  name: string;
+  /**
+   * The module the build bakes for it, from the `compiled` field on its declaration. Its default
+   * export is the app's own screens; its `shape` export, when it has one, the screens that follow
+   * from what the addon declared. Absent for an app whose screens another filter writes.
+   */
+  compiled?: string;
+  /** The declaration as data — every JSON field on it, the installer dropped — for `shape` to read. */
+  declared: Record<string, unknown>;
+}
+
 /** What an addon declared, as far as the build reads it. */
 export interface Declaration extends ManifestFields {
   /** The same fields, where the runtime the addon ships nests them. */
   manifest?: ManifestFields;
-  /** The config schema, scope by scope: what the shaped config screens are built from. */
-  config?: unknown;
+  /**
+   * The bedrock-core apps this addon installed.
+   *
+   * Each app's declaration names itself and the module to bake, so the build reads what to
+   * compile from the same call the addon already writes rather than from a setting repeating
+   * it, and knows no app by name.
+   */
+  apps?: DeclaredApp[];
 }
 
 /**
- * The schema inside a config declaration.
+ * Which apps a declaration installed.
  *
- * `config: config(definition)` hands `register()` an installer, not a schema; the definition the
- * addon wrote rides along on it, and that is what the screens are shaped from. Anything else in the
- * `config` field is not a declaration, so the runtime ignores it and so does the build.
+ * An app's declaration carries its own name — `catalog: registerCatalog()` hands `register()` an
+ * installer tagged `app: 'catalog'` — and, when the build has a module to bake for it, that
+ * module's specifier. Whatever else it carries, config's definition say, rides along as data:
+ * the installer is a function and serialises to nothing.
  */
-function definitionOf(value: unknown): unknown {
-  return typeof value === 'object' && value !== null && 'definition' in value
-    ? (value as { definition: unknown }).definition
-    : undefined;
+function appsOf(options: Record<string, unknown>): DeclaredApp[] {
+  const apps = new Map<string, DeclaredApp>();
+
+  for (const value of Object.values(options)) {
+    if (typeof value !== 'object' || value === null || !('app' in value) || typeof value.app !== 'string') { continue; }
+
+    const compiled = 'compiled' in value && typeof value.compiled === 'string' ? value.compiled : undefined;
+
+    apps.set(value.app, {
+      name: value.app,
+      ...compiled === undefined ? {} : { compiled },
+      declared: JSON.parse(JSON.stringify(value)) as Record<string, unknown>,
+    });
+  }
+
+  return [...apps.values()];
 }
 
 /** What the read found: the declaration, and why it found none when it did not. */
@@ -128,5 +161,11 @@ export default captured.options === undefined ? { failure } : { declaration: cap
 
   if (read.declaration === undefined) { return read; }
 
-  return { ...read, declaration: { ...read.declaration, config: definitionOf(read.declaration.config) } };
+  return {
+    ...read,
+    declaration: {
+      ...read.declaration,
+      apps: appsOf(read.declaration as unknown as Record<string, unknown>),
+    },
+  };
 }

@@ -64,6 +64,20 @@
       "type": "string",
       "default": "",
       "description": "Module whose default export is the registry of components MDX `cmp` blocks may use (a GuideComponents record), relative to the Regolith temp directory, e.g. BP/scripts/guides/components.tsx. Empty, a cmp block renders the unsupported-content placeholder on compiled screens."
+    },
+    "pretty": {
+      "description": "How generated JSON is laid out. Absent or false writes it minified. An object lays it out: `indent` is \"tab\" or \"space\" (spaces when omitted), `size` the characters per level (2 for spaces, 1 for tabs when omitted).",
+      "oneOf": [
+        { "const": false },
+        {
+          "type": "object",
+          "properties": {
+            "indent": { "enum": ["tab", "space"] },
+            "size": { "type": "integer", "minimum": 1 }
+          },
+          "additionalProperties": false
+        }
+      ]
     }
   }
 }

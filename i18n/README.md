@@ -271,3 +271,4 @@ No settings are required when the `core.register` scan succeeds.
 | `vanillaLangUrlTemplate` | `string` | bedrock-samples URL | Where vanilla `.lang` is fetched from — `{locale}` is replaced |
 | `cacheMaxAgeHours` | `number` | `24` | Hours before a locale's cached vanilla `.lang` is stale |
 | `strict` | `boolean` | `true` | Fail the build on check violations instead of warning |
+| `pretty` | `false \| { indent?, size? }` | `false` | How the runtime bundle and `languages.json` are laid out. Absent or `false` writes it minified. An object lays it out: `indent` is `"tab"` or `"space"` (spaces when omitted), `size` the characters per level (2 for spaces, 1 for tabs when omitted) |

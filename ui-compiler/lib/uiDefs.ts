@@ -17,17 +17,28 @@ export interface UiDefsRegistration {
   uiDefsFile: string;
   /** Absolute paths of the emitted UI files. */
   files: string[];
+  /**
+   * The indent to write a file from scratch with, and to comment the entries added to one that
+   * exists. Absent, the file is written minified and the entries uncommented.
+   */
+  indent?: string;
 }
 
 /** @returns how many entries were added */
-export function registerUiDefs({ uiDefsFile, files }: UiDefsRegistration): number {
+export function registerUiDefs({ uiDefsFile, files, indent }: UiDefsRegistration): number {
   const uiRoot = path.dirname(uiDefsFile);
   const entries = files.map(
     file => `ui/${path.relative(uiRoot, file).split(path.sep).join('/')}`,
   );
 
   if (!fs.existsSync(uiDefsFile)) {
-    fs.writeFileSync(uiDefsFile, `${JSON.stringify({ ui_defs: entries }, null, '\t')}\n`, 'utf-8');
+    const document = { ui_defs: entries };
+
+    fs.writeFileSync(
+      uiDefsFile,
+      indent === undefined ? JSON.stringify(document) : `${JSON.stringify(document, null, indent)}\n`,
+      'utf-8',
+    );
 
     return entries.length;
   }
@@ -42,13 +53,13 @@ export function registerUiDefs({ uiDefsFile, files }: UiDefsRegistration): numbe
     return 0;
   }
 
-  const lines = ['\t\t// Emitted by the ui-compiler filter.']
-    .concat(missing.map(entry => `\t\t"${entry}",`))
-    .join('\n');
+  const inserted = indent === undefined
+    ? missing.map(entry => `"${entry}",`).join('')
+    : `\n${[`${indent}${indent}// Emitted by the ui-compiler filter.`, ...missing.map(entry => `${indent}${indent}"${entry}",`)].join('\n')}`;
 
   fs.writeFileSync(
     uiDefsFile,
-    raw.replace(/("ui_defs"\s*:\s*\[)/, `$1\n${lines}`),
+    raw.replace(/("ui_defs"\s*:\s*\[)/, `$1${inserted}`),
     'utf-8',
   );
 

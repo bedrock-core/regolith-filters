@@ -20,8 +20,35 @@ import path from "path";
 type Document = Record<string, unknown>;
 
 /** Settings Regolith passes as argv[2]. */
+// ─── Output layout ────────────────────────────────────────────────────────────
+// The same in every filter of this repository: generated JSON is minified unless
+// a profile asks for it laid out, and then `indent` and `size` say how.
+
+/** How generated JSON is laid out. Absent or `false` writes it minified. */
+interface Pretty {
+  /** "tab" or "space"; spaces when omitted. */
+  indent?: "tab" | "space";
+  /** Characters per level: 2 spaces or 1 tab when omitted. */
+  size?: number;
+}
+
+/** The indent `JSON.stringify` takes, or `undefined` for minified output. */
+function indentOf(pretty: Pretty | false | undefined): string | undefined {
+  if (pretty === undefined || pretty === false) return undefined;
+  const tab = pretty.indent === "tab";
+  return (tab ? "\t" : " ").repeat(Math.max(1, Math.trunc(pretty.size ?? (tab ? 1 : 2))));
+}
+
+/** A generated JSON file: laid out and newline-terminated when `pretty` says so, minified otherwise. */
+function jsonText(value: unknown, pretty: Pretty | false | undefined): string {
+  const indent = indentOf(pretty);
+  return indent === undefined ? JSON.stringify(value) : `${JSON.stringify(value, null, indent)}\n`;
+}
+
 interface Settings {
   manifestPath: string | string[];
+  /** How the resolved manifest is laid out. Absent or `false` writes it minified. */
+  pretty?: Pretty | false;
 }
 
 const projectRoot = process.env.ROOT_DIR;
@@ -218,7 +245,7 @@ function main(): void {
   }
 
   for (const { doc, outFile } of resolved) {
-    fs.writeFileSync(outFile, `${JSON.stringify(doc, null, 4)}\n`);
+    fs.writeFileSync(outFile, jsonText(doc, settings.pretty));
     console.log(`   ✅ Wrote ${relative(outFile)}`);
   }
 

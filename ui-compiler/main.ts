@@ -30,7 +30,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { readDeclaration } from './lib/declaration.ts';
+import { readDeclaration, type DeclaredApp, type ManifestFields } from './lib/declaration.ts';
 import type { Document } from './lib/hooks.ts';
 import { mergeHook, parseJsonc } from './lib/hooks.ts';
 import type { CompiledFormScreen, CompiledScreen, Hook, RoutedFormScreen, ScreenBundle } from './lib/load.ts';
@@ -61,14 +61,11 @@ const SOURCE_DIR = 'BP/scripts';
 // addon gets from it.
 const ENTRY_FILES = ['BP/scripts/main.ts', 'BP/scripts/index.ts'];
 
-/** The screens the config UI serves every addon that mounts it with `ui(core)`. */
-const STACK_SCREENS = '@bedrock-core/config/compiled';
-
-/** The screens an addon's own declaration becomes, written beside the other generated modules. */
+/**
+ * The screens an addon's own declaration becomes, written beside the other generated modules:
+ * what each installed app shapes from its declaration and the manifest.
+ */
 const DECLARED_SCREENS_FILE = 'declared.screens.ts';
-
-/** What the generated page is named among them. */
-const ADDON_PAGE_NAME = 'addon_page';
 
 /** How an addon's scripts reach the module that registers its compiled screens. */
 const GENERATED_UI = '@bedrock-core/generated/ui';
@@ -114,6 +111,31 @@ interface EntityFile {
 }
 
 /** Settings Regolith passes as argv[2]. */
+// ─── Output layout ────────────────────────────────────────────────────────────
+// The same in every filter of this repository: generated JSON is minified unless
+// a profile asks for it laid out, and then `indent` and `size` say how.
+
+/** How generated JSON is laid out. Absent or `false` writes it minified. */
+interface Pretty {
+  /** 'tab' or 'space'; spaces when omitted. */
+  indent?: 'tab' | 'space';
+  /** Characters per level: 2 spaces or 1 tab when omitted. */
+  size?: number;
+}
+
+/** The indent `JSON.stringify` takes, or `undefined` for minified output. */
+function indentOf(pretty: Pretty | false | undefined): string | undefined {
+  if (pretty === undefined || pretty === false) return undefined;
+  const tab = pretty.indent === 'tab';
+  return (tab ? '\t' : ' ').repeat(Math.max(1, Math.trunc(pretty.size ?? (tab ? 1 : 2))));
+}
+
+/** A generated JSON file: laid out and newline-terminated when `pretty` says so, minified otherwise. */
+function jsonText(value: unknown, pretty: Pretty | false | undefined): string {
+  const indent = indentOf(pretty);
+  return indent === undefined ? JSON.stringify(value) : `${JSON.stringify(value, null, indent)}\n`;
+}
+
 interface Settings {
   namespace?: string;
   /**
@@ -124,25 +146,34 @@ interface Settings {
    */
   stamp?: boolean;
   /**
-   * Write every screen's PREVIEW — the screen as faces alone, mounted on the
-   * action form under its own title — and a gallery screen that opens each,
-   * reached as `openGallery(player)` from `@bedrock-core/generated/ui`. For
-   * the development profile: how a screen is looked at before any host
-   * serves it, and never for a shipped pack.
-   */
-  gallery?: boolean;
-  /**
    * Further modules whose default export is a record of screens to compile.
    *
-   * The screens the config UI serves are already compiled from the addon's
-   * declaration, so this is for a library the declaration does not name. Each
+   * The screens the bedrock-core apps serve are already compiled from the
+   * addon's declaration, so this is for a library the declaration does not name. Each
    * export key names the screen; the bundle resolves the specifier the way the
    * addon's scripts would.
    */
   screens?: string[];
+  /**
+   * How the JSON UI this filter emits is laid out. Absent or `false`, every
+   * emitted file is minified and headerless: a compiled screen is a file nobody
+   * reads by hand in a shipped pack, and the indentation is a large share of its
+   * bytes. Laid out, each file is indented as asked and headed with the comment
+   * saying it is generated.
+   */
+  pretty?: Pretty | false;
 }
 
 const settings = JSON.parse(process.argv[2] ?? '{}') as Settings;
+
+const indent = indentOf(settings.pretty);
+
+/** A generated file's body, laid out as the profile asked. */
+const stringify = (value: unknown): string => jsonText(value, settings.pretty);
+
+/** A generated file's header, dropped with the rest of the whitespace when the output is minified. */
+const note = (...lines: string[]): string =>
+  indent === undefined ? '' : `${lines.map(line => line === '' ? '//' : `// ${line}`).join('\n')}\n`;
 
 const cacheDir = path.join(projectRoot, '.regolith', 'cache', 'ui-compiler');
 
@@ -229,9 +260,10 @@ interface ScreenEntry {
 const entries: ScreenEntry[] = screenPaths.map(screenPath => ({ screenPath, name: path.basename(screenPath, SCREEN_SUFFIX) }));
 
 // What this addon declares, read where it says it: `core.register`. The
-// bedrock-core screens an addon is served are shaped from that — a config
-// screen per section of its schema, built for the settings that section has —
-// so nothing is wired up twice. Declaring is what asks for them.
+// bedrock-core screens an addon is served follow from that — each app it
+// installed names the module to bake and shapes the rest from the declaration,
+// a config screen per section of its schema say — so nothing is wired up twice.
+// Declaring is what asks for them.
 const entryPath = ENTRY_FILES.map(file => path.resolve(file)).find(file => fs.existsSync(file));
 
 const read = entryPath === undefined
@@ -247,7 +279,7 @@ const { declaration } = read;
 
 // An addon whose entry throws on the way to its register call gets none of the
 // screens that follow from declaring, so the reason is said out loud here: the
-// alternative is a pack that builds clean and has no config screen in it.
+// alternative is a pack that builds clean with none of its app screens in it.
 if (read.failure !== undefined && entryPath !== undefined) {
   console.warn(`⚠️  ui-compiler: ${rel(entryPath)} registered nothing — ${read.failure}`);
 }
@@ -257,83 +289,40 @@ const generatedScreens: string[] = [];
 // The manifest, wherever the runtime the addon ships keeps it.
 const manifest = { ...declaration, ...declaration?.manifest };
 
-/**
- * What the addon's page in the shared list draws.
- *
- * Everything on the page is in the manifest, so an addon that declared itself
- * has already said all of it. Undefined when the manifest names no creator,
- * pack name or version, which is an addon the list has nothing to draw for.
- */
-const pageInfo = manifest.creator !== undefined && manifest.packName !== undefined && manifest.version !== undefined
-  ? {
-      packName: manifest.packName,
-      version: manifest.version,
-      creator: manifest.creator,
-      ...manifest.creatorName === undefined ? {} : { creatorName: manifest.creatorName },
-      ...manifest.description === undefined ? {} : { description: manifest.description },
-      ...manifest.icon === undefined ? {} : { icon: manifest.icon },
-      ...manifest.thumbnail === undefined ? {} : { thumbnail: manifest.thumbnail },
-    }
-  : undefined;
+/** The manifest as the apps are handed it: its own fields alone, since what else the declaration holds is installers. */
+const manifestFields: ManifestFields = Object.fromEntries(
+  (['creator', 'pack', 'packName', 'version', 'creatorName', 'description', 'icon', 'thumbnail'] as const)
+    .flatMap(field => (manifest[field] === undefined ? [] : [[field, manifest[field]]])),
+);
 
-// The bundle the filters before this one generated, which the addon publishes
-// for other addons to read. Plain data written into this workspace, so the
-// generated module imports it the way the addon's own code would.
-const declaredBundles = [
-  ...i18nBundle === undefined ? [] : [{ name: 'translations', from: '@bedrock-core/generated/i18n' }],
-];
+// The apps with a module to bake. Each is compiled the way a `screens` module
+// is, and asked in a module generated here for the screens that follow from
+// the declaration: the page the manifest becomes, a config screen per section.
+// That module is imported at runtime too — `ui.generated.ts` imports it to
+// register the compiled screens, and the bundler inlines it — so an app also
+// registers what it shaped there, and finds it later under the name it was
+// compiled as.
+const apps = (declaration?.apps ?? []).filter((app): app is DeclaredApp & { compiled: string } => app.compiled !== undefined);
 
-if (pageInfo !== undefined || declaration?.config !== undefined) {
+if (apps.length > 0) {
   const module = path.join(path.resolve(GENERATED_DIR), DECLARED_SCREENS_FILE);
-  const page = pageInfo === undefined
-    ? []
-    : [
-        `const AddonListPage = addonPageScreen(${JSON.stringify(pageInfo, undefined, 2)});`,
-        '',
-      ];
-  const config = declaration?.config === undefined
-    ? []
-    : [
-        `const definition = ${JSON.stringify(declaration.config, undefined, 2)} as const;`,
-        '',
-        'const screens = configScreens(definition as ConfigDefinition);',
-        '',
-        'registerConfigScreens(screens);',
-        '',
-      ];
-  const declared = [
-    ...pageInfo === undefined ? [] : ['page: AddonListPage'],
-    ...declaredBundles.map(bundle => bundle.name),
-  ];
+  const alias = (app: DeclaredApp): string => `app_${app.name.replace(/[^a-z0-9_]/gi, '_')}`;
+  const literal = (value: unknown): string => JSON.stringify(value, undefined, 2).replaceAll('\n', '\n  ');
 
-  // Registered as a side effect, because this module is imported at runtime
-  // anyway — `ui.generated.ts` imports it to register the compiled screens, and
-  // the bundler inlines that. So the config app finds the screen a section
-  // wants because the addon declared the section.
   fs.mkdirSync(path.dirname(module), { recursive: true });
   fs.writeFileSync(module, [
     '// GENERATED by the ui-compiler filter — do not edit.',
     '//',
-    '// What this addon declared, as the screens and announcements that follow',
-    '// from it: its page in the shared addon list drawn from its manifest, one',
-    '// config screen per section of its schema shaped for the settings that',
-    '// section has, and the bundles `ui()` publishes on its behalf.',
+    '// The screens that follow from what this addon declared, shaped by each app',
+    '// it installed from its own declaration and the manifest.',
     '',
-    `import { ${[
-      ...pageInfo === undefined ? [] : ['addonPageScreen'],
-      ...declaration?.config === undefined ? [] : ['configScreens', 'registerConfigScreens'],
-      ...declared.length === 0 ? [] : ['registerDeclared'],
-    ].join(', ')} } from '@bedrock-core/config';`,
-    ...declaration?.config === undefined ? [] : ['import type { ConfigDefinition } from \'@bedrock-core/config/server\';'],
-    ...declaredBundles.map(bundle => `import ${bundle.name} from '${bundle.from}';`),
+    ...apps.map(app => `import * as ${alias(app)} from '${app.compiled}';`),
     '',
-    ...page,
-    ...config,
-    ...declared.length === 0 ? [] : [`registerDeclared({ ${declared.join(', ')} });`, ''],
-    `export default { ${[
-      ...pageInfo === undefined ? [] : [`${ADDON_PAGE_NAME}: AddonListPage`],
-      ...declaration?.config === undefined ? [] : ['...screens'],
-    ].join(', ')} };`,
+    `const manifest = ${JSON.stringify(manifestFields, undefined, 2)};`,
+    '',
+    'export default {',
+    ...apps.map(app => `  ...${alias(app)}.shape?.(${literal(app.declared)}, manifest),`),
+    '};',
     '',
   ].join('\n'), 'utf-8');
 
@@ -343,13 +332,13 @@ if (pageInfo !== undefined || declaration?.config !== undefined) {
   console.log(`\u{1F9E9} ui-compiler: declaration \u2192 ${GENERATED_DIR}/${DECLARED_SCREENS_FILE}`);
 }
 
-// The screens the config UI serves every addon, compiled into THIS addon's pack
-// the way its own files are: the runtime that renders them is the one this
-// addon ships. The declaration is what asks for them, because `ui(core)` is how
-// an addon mounts the stack and `core.register` is what it hands over.
+// The screens each bedrock-core app serves, compiled into THIS addon's pack the
+// way its own files are: the runtime that renders them is the one this addon
+// ships. The declaration is what asks for them, because an app is a field of
+// `core.register` and that is what the build reads.
 const specifiers = [...new Set([
   ...settings.screens ?? [],
-  ...declaration === undefined ? [] : [STACK_SCREENS],
+  ...apps.map(app => app.compiled),
   ...generatedScreens,
 ])];
 
@@ -361,7 +350,8 @@ for (const specifier of specifiers) {
       return process.exit(1);
     });
 
-  if (exported.length === 0) {
+  // The generated module may shape nothing: a manifest with no display fields has no page.
+  if (exported.length === 0 && !generatedScreens.includes(specifier)) {
     console.error(`❌ ui-compiler: ${specifier} default-exports no screens`);
     process.exit(1);
   }
@@ -513,15 +503,14 @@ for (const { screenPath, name, exportName } of entries) {
 
   const screen = bundle.compiled;
 
-  const header = [
-    '// GENERATED by the ui-compiler filter — do not edit.',
-    `// Source: ${rel(screenPath)}`,
-    '',
-  ].join('\n');
+  const header = note(
+    'GENERATED by the ui-compiler filter — do not edit.',
+    `Source: ${rel(screenPath)}`,
+  );
 
   fs.writeFileSync(
     path.join(outputDir, `${name}.json`),
-    `${header}${JSON.stringify(screen.document, null, '\t')}\n`,
+    `${header}${stringify(screen.document)}`,
     'utf-8',
   );
 
@@ -565,155 +554,19 @@ if (library === undefined) {
 // body, and re-asserting it at each use is worse than naming it once.
 const runtime = library;
 
-// ─── Gallery ──────────────────────────────────────────────────────────────────
-
-// Every screen as faces alone, and one screen that opens each of them. A
-// preview is the face document under its own namespace, gated on its own
-// title like any compiled form screen; the gallery is an ordinary compiled
-// screen written here and compiled last, since it lists the others.
-const GALLERY_DIR = 'BP/scripts/gallery';
-const GALLERY_NAME = 'gallery';
-
-/** The previews the form router gates, beside the screens themselves. */
-const previewRoutes: RoutedFormScreen[] = [];
-const previewFiles: string[] = [];
-
-if (settings.gallery === true) {
-  const previewed = [...compiled, ...forms];
-
-  for (const screen of previewed) {
-    const file = path.join(outputDir, `${screen.name}.preview.json`);
-
-    fs.writeFileSync(
-      file,
-      '// GENERATED by the ui-compiler filter — do not edit.\n'
-      + `// Source: ${screen.name} as faces alone, for the gallery.\n`
-      + `${JSON.stringify(screen.preview.document, null, '\t')}\n`,
-      'utf-8',
-    );
-
-    previewFiles.push(file);
-    previewRoutes.push({
-      name: `${screen.name}__preview`,
-      namespace: screen.preview.namespace,
-      hasBackdrop: screen.preview.hasBackdrop,
-    });
-  }
-
-  if (previewed.some(screen => screen.name === GALLERY_NAME)) {
-    fail(rel(path.join(SOURCE_DIR, `${GALLERY_NAME}.screen.tsx`)), new Error(
-      `"${GALLERY_NAME}" is the name of the screen the gallery setting generates; rename the addon's screen or turn the gallery off`,
-    ));
-  }
-
-  const galleryDir = path.resolve(GALLERY_DIR);
-  const galleryPath = path.join(galleryDir, `${GALLERY_NAME}.screen.tsx`);
-  const rows = previewed.map(screen => ({
-    label: screen.name,
-    key: screenKey(`${screen.name}__preview`),
-    title: screen.preview.title,
-  }));
-
-  fs.mkdirSync(galleryDir, { recursive: true });
-  fs.writeFileSync(
-    galleryPath,
-    [
-      '/** @jsxImportSource @bedrock-core/ui */',
-      '// GENERATED by the ui-compiler filter — do not edit.',
-      '//',
-      '// The gallery: every compiled screen of this addon, opened as faces alone.',
-      '// A preview is a registered compiled screen whose tree is empty: the title',
-      '// is what reaches the layout, and rendering it through the session is what',
-      '// lets a press leave the gallery cleanly — a form shown outside the session',
-      '// races the gallery\'s own re-present.',
-      '',
-      "import { Link, Panel, registerCompiledScreen, Screen, Scroll, Text, type FunctionComponent, type JSX } from '@bedrock-core/ui';",
-      '',
-      `const SCREENS: readonly { readonly label: string; readonly key: string; readonly title: string }[] = ${JSON.stringify(rows, null, 2)};`,
-      '',
-      'for (const screen of SCREENS) {',
-      '  const Preview: FunctionComponent = (): JSX.Element => <Screen><Panel width={1} height={1} /></Screen>;',
-      '',
-      '  registerCompiledScreen(Preview, { key: screen.key, title: screen.title });',
-      '}',
-      '',
-      'const ROW = 18;',
-      '',
-      'export default function Gallery(): JSX.Element {',
-      '  return (',
-      '    <Screen>',
-      '      <Panel width={300} height={200} flexDirection="column" padding={6} gap={4} background="textures/ui/dialog_background_opaque">',
-      '        <Text>{\'§lGallery\'}</Text>',
-      '        <Scroll width={288} height={168}>',
-      '          <Panel flexDirection="column" gap={2}>',
-      '            {SCREENS.map(screen => (',
-      '              <Link',
-      '                key={screen.title}',
-      '                to={screen.key}',
-      '                width={276}',
-      '                height={ROW}',
-      '                justifyContent="center"',
-      '                alignItems="center"',
-      '                background="textures/ui/button_borderless_dark"',
-      '                backgroundHover="textures/ui/button_borderless_darkhover"',
-      '                backgroundPressed="textures/ui/button_borderless_darkpressed"',
-      '              >',
-      '                <Text>{screen.label}</Text>',
-      '              </Link>',
-      '            ))}',
-      '          </Panel>',
-      '        </Scroll>',
-      '      </Panel>',
-      '    </Screen>',
-      '  );',
-      '}',
-      '',
-    ].join('\n'),
-    'utf-8',
-  );
-
-  const bundle = await loadScreen({
-    screenPath: galleryPath,
-    name: GALLERY_NAME,
-    namespace,
-    cacheDir,
-    jsxImportSource: JSX_IMPORT_SOURCE,
-    i18nBundle,
-    aliases: generatedAliases,
-  }).catch((error: unknown) => fail(rel(galleryPath), error));
-
-  const gallery = bundle.compiled as CompiledFormScreen;
-
-  fs.writeFileSync(
-    path.join(outputDir, `${GALLERY_NAME}.json`),
-    '// GENERATED by the ui-compiler filter — do not edit.\n'
-    + `// Source: ${rel(galleryPath)}\n`
-    + `${JSON.stringify(gallery.document, null, '\t')}\n`,
-    'utf-8',
-  );
-
-  for (const [id, face] of Object.entries(gallery.faces)) {
-    faces[id] ??= face;
-  }
-
-  forms.push(gallery);
-  formSources.set(GALLERY_NAME, galleryPath);
-
-  console.log(`✅ ui-compiler: ${GALLERY_NAME} — ${rows.length} preview(s)`);
-}
-
 // ─── Faces ────────────────────────────────────────────────────────────────────
 
 // The addon's shared looks, one file: every screen references them by name,
-// and the gallery draws them with nothing else.
+// the same on every screen that draws them.
 const facesFile = path.join(outputDir, 'faces.json');
 
 fs.writeFileSync(
   facesFile,
-  '// GENERATED by the ui-compiler filter — do not edit.\n'
-  + '// The looks this addon\'s compiled screens share: no bindings, the same\n'
-  + '// on every screen that draws them.\n'
-  + `${JSON.stringify({ namespace: facesNamespace ?? `${namespace}_faces`, ...faces }, null, '\t')}\n`,
+  note(
+    'GENERATED by the ui-compiler filter — do not edit.',
+    'The looks this addon\'s compiled screens share: no bindings, the same',
+    'on every screen that draws them.',
+  ) + stringify({ namespace: facesNamespace ?? `${namespace}_faces`, ...faces }),
   'utf-8',
 );
 
@@ -812,13 +665,14 @@ for (const [index, hook] of routing.hooks.entries()) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(
     file,
-    '// GENERATED by the ui-compiler filter — do not edit.\n'
-    + '// Inserts this addon\'s compiled-screen root on vanilla\'s chest screen.\n'
-    + '//\n'
-    + '// A modification of vanilla\'s own file at vanilla\'s own path: it stacks\n'
-    + '// with the render pack\'s edit and with every other addon\'s, whatever order\n'
-    + '// the packs sit in. Nothing is defined here on purpose.\n'
-    + `${JSON.stringify(document, null, '\t')}\n`,
+    note(
+      'GENERATED by the ui-compiler filter — do not edit.',
+      'Inserts this addon\'s compiled-screen root on vanilla\'s chest screen.',
+      '',
+      'A modification of vanilla\'s own file at vanilla\'s own path: it stacks',
+      'with the render pack\'s edit and with every other addon\'s, whatever order',
+      'the packs sit in. Nothing is defined here on purpose.',
+    ) + stringify(document),
     'utf-8',
   );
   console.log(`   ↳ hook → ${rel(file)}${existing === undefined ? '' : ' (merged)'}`);
@@ -827,10 +681,11 @@ for (const [index, hook] of routing.hooks.entries()) {
 if (routerFile !== undefined) {
   fs.writeFileSync(
     routerFile,
-    '// GENERATED by the ui-compiler filter — do not edit.\n'
-    + '// Gates this addon\'s compiled layouts onto the chest screen; vanilla\'s own\n'
-    + '// chest shows when no layout claims it.\n'
-    + `${JSON.stringify(routing.router, null, '\t')}\n`,
+    note(
+      'GENERATED by the ui-compiler filter — do not edit.',
+      'Gates this addon\'s compiled layouts onto the chest screen; vanilla\'s own',
+      'chest shows when no layout claims it.',
+    ) + stringify(routing.router),
     'utf-8',
   );
 
@@ -850,7 +705,7 @@ if (forms.length > 0) {
   let formRouting: ReturnType<ScreenBundle['formRouter']> | undefined;
 
   try {
-    formRouting = runtime.formRouter([...forms, ...previewRoutes], namespace);
+    formRouting = runtime.formRouter(forms, namespace);
   } catch (error) {
     fail(OUTPUT_DIR, error);
   }
@@ -884,11 +739,12 @@ if (forms.length > 0) {
     fs.mkdirSync(path.dirname(mountFile), { recursive: true });
     fs.writeFileSync(
       mountFile,
-      '// GENERATED by the ui-compiler filter — do not edit.\n'
-      + '// Puts this addon\'s compiled form screens on the library\'s mount.\n'
-      + '//\n'
-      + '// This pack defines the mount, so its own screens are listed in it directly.\n'
-      + `${JSON.stringify(mount, null, '\t')}\n`,
+      note(
+        'GENERATED by the ui-compiler filter — do not edit.',
+        'Puts this addon\'s compiled form screens on the library\'s mount.',
+        '',
+        'This pack defines the mount, so its own screens are listed in it directly.',
+      ) + stringify(mount),
       'utf-8',
     );
     formFiles.push(mountFile);
@@ -914,10 +770,11 @@ if (forms.length > 0) {
     fs.mkdirSync(path.dirname(serverFormFile), { recursive: true });
     fs.writeFileSync(
       serverFormFile,
-      '// GENERATED by the ui-compiler filter — do not edit.\n'
-      + '// Puts this addon\'s compiled form screens on the form screen: a hook at\n'
-      + '// vanilla\'s own path, defining nothing, which stacks across packs.\n'
-      + `${JSON.stringify(document, null, '\t')}\n`,
+      note(
+        'GENERATED by the ui-compiler filter — do not edit.',
+        'Puts this addon\'s compiled form screens on the form screen: a hook at',
+        'vanilla\'s own path, defining nothing, which stacks across packs.',
+      ) + stringify(document),
       'utf-8',
     );
     console.log(`   ↳ form hook → ${rel(serverFormFile)}${existingHook === undefined ? '' : ' (merged)'}`);
@@ -927,10 +784,11 @@ if (forms.length > 0) {
   fs.mkdirSync(path.dirname(formRouterFile), { recursive: true });
   fs.writeFileSync(
     formRouterFile,
-    '// GENERATED by the ui-compiler filter — do not edit.\n'
-    + '// Gates this addon\'s compiled form screens; each shows for exactly the\n'
-    + '// title the runtime opens it with.\n'
-    + `${JSON.stringify(formRouting.router, null, '\t')}\n`,
+    note(
+      'GENERATED by the ui-compiler filter — do not edit.',
+      'Gates this addon\'s compiled form screens; each shows for exactly the',
+      'title the runtime opens it with.',
+    ) + stringify(formRouting.router),
     'utf-8',
   );
 
@@ -962,8 +820,6 @@ if (forms.length > 0) {
   const moduleSpecifier = (specifier: string): string => (specifier.startsWith('.')
     ? specifierFor(path.resolve(specifier))
     : specifier);
-
-  const gallery = settings.gallery === true ? { alias: `Screen${forms.findIndex(screen => screen.name === GALLERY_NAME)}` } : undefined;
 
   // A screen the build described in full ships as a ROW rather than as a module:
   // no import, so its component, everything it renders and everything that data
@@ -1000,7 +856,7 @@ if (forms.length > 0) {
       snapshot: screen.snapshot,
       static: screen.table !== undefined,
     };
-  }).filter(entry => !entry.static || entry.alias === gallery?.alias);
+  }).filter(entry => !entry.static);
 
   fs.mkdirSync(generatedDir, { recursive: true });
   fs.writeFileSync(
@@ -1054,34 +910,13 @@ if (forms.length > 0) {
       '',
       '/**',
       ' * Every static screen of this addon as another realm can show it: the title,',
-      ' * the entry values and where each press leads. `ui(core)` announces it at',
+      ' * the entry values and where each press leads. The realm announces it at',
       ' * startup; announce it directly with `screens(core).provide(uiReference())`',
       " * from '@bedrock-core/navigation' — and any realm draws this addon's screens",
       ' * from the pack every client already holds.',
       ' */',
       'export function uiReference(): AddonReference {',
       '  return addonReference(UI_NAMESPACE);',
-      '}',
-      '',
-      '/**',
-      ' * Opens the gallery: every compiled screen of this addon as faces alone.',
-      ' * Built only when the ui-compiler filter runs with `gallery: true`; a build',
-      ' * without it warns and shows nothing.',
-      ' */',
-      'export function openGallery(player: Player, options: RenderOptions = {}): boolean {',
-      ...gallery === undefined
-        ? [
-            '  void player;',
-            '  void options;',
-            '  console.warn(\'[ui] this build has no gallery: set `gallery: true` on the ui-compiler filter\');',
-            '',
-            '  return false;',
-          ]
-        : [
-            `  render(${gallery.alias}, player, options);`,
-            '',
-            '  return true;',
-          ],
       '}',
       '',
     ].join('\n'),
@@ -1157,8 +992,8 @@ if (settings.stamp === true) {
 
   fs.writeFileSync(
     stampFile,
-    '// GENERATED by the ui-compiler filter — do not edit.\n'
-    + JSON.stringify({
+    note('GENERATED by the ui-compiler filter — do not edit.')
+    + stringify({
       namespace: 'core_ui_build',
       stamp: {
         type: 'label',
@@ -1173,7 +1008,7 @@ if (settings.stamp === true) {
         offset: [2, 2],
         layer: 50,
       },
-    }, null, '\t') + '\n',
+    }),
     'utf-8',
   );
 
@@ -1181,8 +1016,8 @@ if (settings.stamp === true) {
   // other pack's edits to the HUD.
   fs.writeFileSync(
     hudFile,
-    '// GENERATED by the ui-compiler filter — do not edit.\n'
-    + JSON.stringify(mergeOrFail(existingHud, {
+    note('GENERATED by the ui-compiler filter — do not edit.')
+    + stringify(mergeOrFail(existingHud, {
       namespace: 'hud',
       root_panel: {
         modifications: [
@@ -1193,7 +1028,7 @@ if (settings.stamp === true) {
           },
         ],
       },
-    }, rel(hudFile)), null, '\t') + '\n',
+    }, rel(hudFile))),
     'utf-8',
   );
 
@@ -1207,13 +1042,13 @@ if (settings.stamp === true) {
 // build ran; the library's static files are the render pack's own business.
 const added = registerUiDefs({
   uiDefsFile: path.resolve(RESOURCE_PACK, 'ui', '_ui_defs.json'),
+  indent,
   files: [
     ...hookFiles,
     ...routerFile === undefined ? [] : [routerFile],
     ...formFiles,
     ...stampFiles,
     facesFile,
-    ...previewFiles,
     ...[...compiled, ...forms].map(screen => path.join(outputDir, `${screen.name}.json`)),
   ],
 });
@@ -1280,7 +1115,7 @@ for (const screen of compiled) {
     default: screen.layoutId,
   };
 
-  fs.writeFileSync(match, `${JSON.stringify(definition, null, '\t')}\n`, 'utf-8');
+  fs.writeFileSync(match, stringify(definition), 'utf-8');
 
   console.log(
     `   ↳ ${screen.entity}: inventory_size ${screen.allocation.size}, ${layoutProperty} = ${screen.layoutId}`,

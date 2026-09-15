@@ -128,7 +128,7 @@ with your own globals, set `typePrefix` — `"Mc"` gives `McBlock`, `McEntity`, 
 | --- | --- | --- |
 | `include` | `BP/**/*.ts`, `RP/**/*.ts` | Globs to scan. String or array. |
 | `exclude` | `BP/scripts/**`, `**/*.d.ts` | Globs to skip. |
-| `pretty` | `true` | Indent the output JSON. |
+| `pretty` | `false` | How the output JSON is laid out. Absent or `false` writes it minified; `{ "indent": "tab" }` or `{ "indent": "space", "size": 4 }` lays it out. |
 | `types` | `true` | Generate the Minecraft types. `false` skips the download entirely. |
 | `schemaVersion` | `"latest"` | Dist-tag (`latest`, `beta`) or exact version. Pin it for reproducible builds. |
 | `typesDir` | `<dataPath>/generated/mc` | Where the types land, relative to project root. |

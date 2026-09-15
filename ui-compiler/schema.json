@@ -14,16 +14,37 @@
 			"default": false,
 			"description": "Draw a build stamp at the HUD's top-left — a short hash of every compiled screen plus the build clock — so a running client shows which build it is rendering."
 		},
-		"gallery": {
-			"type": "boolean",
-			"default": false,
-			"description": "Write every screen's preview — the screen as faces alone, mounted on the action form under its own title — and a gallery screen that opens each, reached as openGallery(player) from @bedrock-core/generated/ui. For a development profile."
-		},
 		"screens": {
 			"type": "array",
-			"items": { "type": "string" },
+			"items": {
+				"type": "string"
+			},
 			"default": [],
-			"description": "Modules whose default export is a record of screens to compile besides the addon's own *.screen.tsx files — a library's generic screens, e.g. \"@bedrock-core/config/compiled\". Each export key names the screen."
+			"description": "Modules whose default export is a record of screens to compile besides the addon's own *.screen.tsx files — a library's generic screens. The bedrock-core apps are added from the register call and need no entry here. Each export key names the screen."
+		},
+		"pretty": {
+			"description": "How generated JSON is laid out. Absent or false writes it minified. An object lays it out: `indent` is \"tab\" or \"space\" (spaces when omitted), `size` the characters per level (2 for spaces, 1 for tabs when omitted).",
+			"oneOf": [
+				{
+					"const": false
+				},
+				{
+					"type": "object",
+					"properties": {
+						"indent": {
+							"enum": [
+								"tab",
+								"space"
+							]
+						},
+						"size": {
+							"type": "integer",
+							"minimum": 1
+						}
+					},
+					"additionalProperties": false
+				}
+			]
 		}
 	}
 }

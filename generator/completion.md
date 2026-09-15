@@ -34,7 +34,7 @@ Settings:
 
 - `include` (string|string[]) — glob(s) for template discovery
 - `exclude` (string|string[]) — glob(s) to ignore
-- `pretty` (boolean, default true) — pretty-print output JSON
+- `pretty` (false or `{ indent?: "tab" | "space", size?: number }`, default false) — how output JSON is laid out; absent or false writes it minified
 - `types` (boolean, default true) — generate the Minecraft schema types
 - `schemaVersion` (string, default "latest") — dist-tag or exact schema package version
 - `typesDir` (string) — where generated types land (default `<dataPath>/generated/mc`)

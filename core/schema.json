@@ -7,7 +7,27 @@
 	"properties": {
 		"shared": {
 			"type": "object",
-			"description": "Settings merged into every stage. The addon's namespace belongs here; a stage that does not read a key ignores it.",
+			"description": "Settings merged into every stage. The addon's `namespace` belongs here, and so does `pretty`, which lays out every file the stack generates. A stage that does not read a key ignores it.",
+			"properties": {
+				"namespace": {
+					"type": "string",
+					"description": "The addon's namespace, `<creator>_<pack>`, when the stages should not read it off the `core.register()` call."
+				},
+				"pretty": {
+					"description": "How generated JSON is laid out. Absent or false writes it minified. An object lays it out: `indent` is \"tab\" or \"space\" (spaces when omitted), `size` the characters per level (2 for spaces, 1 for tabs when omitted).",
+					"oneOf": [
+						{ "const": false },
+						{
+							"type": "object",
+							"properties": {
+								"indent": { "enum": ["tab", "space"] },
+								"size": { "type": "integer", "minimum": 1 }
+							},
+							"additionalProperties": false
+						}
+					]
+				}
+			},
 			"default": {}
 		},
 		"manifest": { "$ref": "#/definitions/stage" },
