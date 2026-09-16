@@ -8,8 +8,10 @@
  * cannot be read that way, so this takes the place of `changeset tag`.
  *
  * It refuses while changesets are pending, never moves an existing tag, pushes
- * every new tag in one push, and cuts a GitHub release per tag from that version's
- * CHANGELOG section when `gh` is authenticated through GH_TOKEN.
+ * every new tag in one push, and cuts a GitHub release from that version's
+ * CHANGELOG section for every current tag that has none yet, when `gh` is
+ * authenticated through GH_TOKEN. A run that stopped between tags and releases
+ * is finished by running it again.
  *
  *   node scripts/tag-filters.mjs            tag, push, release
  *   node scripts/tag-filters.mjs --dry-run  print what it would do, change nothing
@@ -51,6 +53,7 @@ try {
 }
 
 const existing = new Set(git('tag', '--list').split('\n').filter(Boolean));
+const current = [];
 const created = [];
 
 for (const filter of workspaces) {
@@ -65,6 +68,8 @@ for (const filter of workspaces) {
   const { version } = readJson(path.join(filter, 'package.json'));
   const tag = `${filter}-${version}`;
 
+  current.push({ filter, version, tag });
+
   if (existing.has(tag)) {
     console.log(`  ${tag} exists`);
     continue;
@@ -78,18 +83,17 @@ for (const filter of workspaces) {
   }
 }
 
-if (created.length === 0) {
-  console.log('tag-filters: every filter version is already tagged');
-  process.exit(0);
-}
-
 if (dryRun) {
   console.log(`tag-filters: dry run, ${created.length} tag(s) not created`);
   process.exit(0);
 }
 
-git('push', 'origin', ...created.map(({ tag }) => `refs/tags/${tag}`));
-console.log(`tag-filters: pushed ${created.length} tag(s)`);
+if (created.length === 0) {
+  console.log('tag-filters: every filter version is already tagged');
+} else {
+  git('push', 'origin', ...created.map(({ tag }) => `refs/tags/${tag}`));
+  console.log(`tag-filters: pushed ${created.length} tag(s)`);
+}
 
 /** The body of `## <version>` in a filter's changelog, or undefined when it has none. */
 const changelogSection = (filter, version) => {
@@ -118,9 +122,21 @@ if (!process.env.GH_TOKEN) {
   process.exit(0);
 }
 
+/** Whether GitHub already has a release for `tag`. */
+const released = (tag) => {
+  try {
+    execFileSync('gh', ['release', 'view', tag], { cwd: root, stdio: 'ignore' });
+
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const unreleased = current.filter(({ tag }) => !released(tag));
 const notesDir = mkdtempSync(path.join(os.tmpdir(), 'filter-release-'));
 
-for (const { filter, version, tag } of created) {
+for (const { filter, version, tag } of unreleased) {
   const notes = changelogSection(filter, version) ?? `Documentation: ${DOCS}/${filter}`;
   const notesFile = path.join(notesDir, `${tag}.md`);
 
@@ -136,4 +152,4 @@ for (const { filter, version, tag } of created) {
   ], { cwd: root, stdio: 'inherit' });
 }
 
-console.log(`tag-filters: ${created.length} GitHub release(s) created`);
+console.log(`tag-filters: ${unreleased.length} GitHub release(s) created`);

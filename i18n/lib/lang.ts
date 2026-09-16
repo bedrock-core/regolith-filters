@@ -68,7 +68,8 @@ export function selectMetaEntries(entries: Map<string, string>, namespace: strin
  * as a last line of defense (flattenResources rejects newlines first).
  */
 export function upsertGeneratedSection(content: string, entries: Map<string, string>): string {
-  const base = stripGeneratedSection(content).replace(/\s+$/, '');
+  // Trailing blank lines go; a trailing space on the last value is part of that value.
+  const base = stripGeneratedSection(content).replace(/(\r?\n[ \t]*)+$/, '');
 
   const lines = [SECTION_BEGIN];
   for (const key of [...entries.keys()].sort()) {

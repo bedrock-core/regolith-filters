@@ -25,6 +25,10 @@ regolith install github.com/bedrock-core/regolith-filters/bundler
 `debug` adds source maps, disables minification and keeps function names, for a development
 profile — a release profile omits it.
 
+A `*.screen.tsx` module is bundled with the [`ui-compiler`](../ui-compiler/README.md) filter's
+conditional rewrite, so a pack with screens needs `ui-compiler` installed beside this filter. A pack
+without screens does not.
+
 ## Documentation
 
 https://bedrock-core.drav.dev/docs/filters/bundler

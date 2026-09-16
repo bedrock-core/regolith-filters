@@ -321,6 +321,33 @@ describe('format_version 3', () => {
     assert.match(output, /"dependencies\[0\]\.version" must be a SemVer string/);
   });
 
+  it('rejects a malformed version string', () => {
+    workspace({
+      'BP/manifest.json': {
+        ...BASE,
+        header: { ...BASE.header, version: 'latest', min_engine_version: '1.26' },
+        modules: [{ ...BASE.modules[0], version: '' }],
+      },
+    });
+
+    const output = runFails();
+
+    assert.match(output, /"header\.version" must be a SemVer string/);
+    assert.match(output, /"header\.min_engine_version" must be a SemVer string/);
+    assert.match(output, /"modules\[0\]\.version" must be a SemVer string/);
+  });
+
+  it('accepts prerelease versions and the base_game_version wildcard', () => {
+    workspace({
+      'BP/manifest.json': {
+        ...BASE,
+        header: { ...BASE.header, version: '1.0.0-beta.2+build.7', base_game_version: '*' },
+      },
+    });
+
+    run();
+  });
+
   it('rejects a manifest with no metadata.authors', () => {
     workspace({ 'BP/manifest.json': { ...BASE, metadata: { product_type: 'addon' } } });
 

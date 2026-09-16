@@ -5,7 +5,8 @@
   "description": "Regolith filter that compiles container screens written in JSX into static JSON UI.",
   "type": "module",
   "dependencies": {
-    "esbuild": "^0.25.10"
+    "esbuild": "^0.25.10",
+    "typescript": "^5.9.2"
   },
   "engines": {
     "node": ">=22.18.0"

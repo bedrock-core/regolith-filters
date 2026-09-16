@@ -179,13 +179,18 @@ function resolveChain(file: string, ancestors: string[]): Document {
   return merge(resolveChain(parentFile, [...ancestors, abs]), doc) as Document;
 }
 
+/** SemVer 2.0.0, prerelease and build metadata included. */
+const SEMVER =
+  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*)?(?:\+[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*)?$/;
+
 /**
- * Version 3 dropped the `[major, minor, patch]` array form everywhere it used to appear —
- * `header.version`, `header.min_engine_version`, `header.base_game_version`, every
- * `modules[].version` and `dependencies[].version` must all be SemVer strings now.
+ * A version 3 manifest writes every version as a SemVer string: `header.version`,
+ * `header.min_engine_version`, `header.base_game_version`, every `modules[].version` and
+ * `dependencies[].version`. A world template's `base_game_version` may also be the `"*"` wildcard.
  */
-function checkVersionString(value: unknown, path: string, problems: string[]): void {
-  if (value === undefined || typeof value === "string") return;
+function checkVersionString(value: unknown, path: string, problems: string[], wildcard = false): void {
+  if (value === undefined) return;
+  if (typeof value === "string" && (SEMVER.test(value) || (wildcard && value === "*"))) return;
   problems.push(`"${path}" must be a SemVer string in a version 3 manifest, e.g. "1.0.0"`);
 }
 
@@ -205,7 +210,7 @@ function validate(doc: Document, file: string): void {
     if (!doc.header.uuid) problems.push('"header.uuid" is missing');
     checkVersionString(doc.header.version, "header.version", problems);
     checkVersionString(doc.header.min_engine_version, "header.min_engine_version", problems);
-    checkVersionString(doc.header.base_game_version, "header.base_game_version", problems);
+    checkVersionString(doc.header.base_game_version, "header.base_game_version", problems, true);
   }
 
   if (doc.modules !== undefined) {

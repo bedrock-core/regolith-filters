@@ -101,7 +101,7 @@ function plan(stage: Stage): Step | null {
   if (own === false) return null;
   if (own === undefined) {
     if (stage === OPT_IN) return null;
-  } else if (own !== true && !isRecord(own)) {
+  } else if (!isRecord(own) && !(own === true && stage === OPT_IN)) {
     fail(
       `"${stage}" must be an object or false`,
       stage === OPT_IN ? 'or true, to run it with its defaults' : undefined,

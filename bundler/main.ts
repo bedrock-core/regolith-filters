@@ -3,8 +3,29 @@ import fs from "fs";
 import { parseTsconfig, type TsConfigJson } from "get-tsconfig";
 import json5 from "json5";
 import path from "path";
+import { pathToFileURL } from "url";
 
-import { desugarJsxConditionals } from "../ui-compiler/lib/sugar.ts";
+type Desugar = (source: string, fileName: string) => string;
+
+/** Where the ui-compiler filter sits when Regolith installs it beside this one. */
+const SUGAR_MODULE = path.join(import.meta.dirname, "..", "ui-compiler", "lib", "sugar.ts");
+
+let desugar: Promise<Desugar> | undefined;
+
+/**
+ * The ui-compiler filter's conditional rewrite, loaded on the first screen module. A pack with
+ * no `*.screen.tsx` never reaches it, so this filter also runs without ui-compiler installed.
+ */
+function loadDesugar(): Promise<Desugar> {
+  desugar ??= fs.existsSync(SUGAR_MODULE)
+    ? import(pathToFileURL(SUGAR_MODULE).href)
+      .then((mod: { desugarJsxConditionals: Desugar }) => mod.desugarJsxConditionals)
+    : Promise.reject(new Error(
+      "bundler: *.screen.tsx files need the ui-compiler filter installed beside this one (regolith install ui-compiler)",
+    ));
+
+  return desugar;
+}
 
 /**
  * Rewrites React's conditional-rendering idioms in screen modules into carried
@@ -15,8 +36,8 @@ import { desugarJsxConditionals } from "../ui-compiler/lib/sugar.ts";
 const jsxSugarPlugin: Plugin = {
   name: "jsx-conditional-sugar",
   setup(pluginBuild: PluginBuild) {
-    pluginBuild.onLoad({ filter: /\.screen\.tsx$/ }, (args) => ({
-      contents: desugarJsxConditionals(fs.readFileSync(args.path, "utf-8"), args.path),
+    pluginBuild.onLoad({ filter: /\.screen\.tsx$/ }, async (args) => ({
+      contents: (await loadDesugar())(fs.readFileSync(args.path, "utf-8"), args.path),
       loader: "tsx",
     }));
   },
