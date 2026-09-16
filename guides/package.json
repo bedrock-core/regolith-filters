@@ -1,6 +1,7 @@
 {
   "name": "@bedrock-core/regolith-filters_guides",
-  "version": "1.2.0",
+  "version": "1.1.1",
+  "private": true,
   "description": "Regolith filter that compiles MDX guide content into a guide IR manifest and auto-localized .lang entries for @bedrock-core/guides.",
   "type": "module",
   "engines": {

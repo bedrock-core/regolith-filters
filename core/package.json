@@ -1,6 +1,7 @@
 {
   "name": "@bedrock-core/regolith-filters_core",
-  "version": "1.0.0",
+  "version": "0.0.0",
+  "private": true,
   "description": "Regolith filter that runs the Bedrock Core filter stack in dependency order.",
   "type": "module",
   "engines": {
