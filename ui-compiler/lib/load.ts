@@ -55,8 +55,8 @@ export interface CompiledScreen {
   namespace: string;
   /** Key the router picks this layout by, derived from `<namespace>_<name>`. */
   layoutId: number;
-  /** Type of the entity the screen opens from. */
-  entity: string;
+  /** What the screen opens from: a custom entity, or a custom block. */
+  host: { kind: 'entity' | 'block'; type: string };
   document: Document;
   /** The screen as faces alone, before any host stood its mechanisms in. */
   face: { document: Document };
@@ -130,10 +130,12 @@ export interface ScreenBundle {
   };
   /** The `.lang` lines live text decodes through. */
   lang: string[];
-  /** Entity property the runtime reads the layout key from. */
+  /** Where the runtime reads the layout key from: an entity property, and a block state of the same name. */
   layoutProperty: string;
   /** Highest layout key the runtime can address. */
   maxLayout: number;
+  /** Slots a block container can hold, which is the whole of a block-hosted screen's allocation. */
+  blockSlotLimit: number;
   /** The encoding and vocabulary windows of the library the screen was compiled against. */
   windows: { encodingMin: number; encodingMax: number; vocabularyMin: number; vocabularyMax: number };
 }
@@ -163,7 +165,7 @@ createI18n(i18nBundle);
 import * as screenModule from ${JSON.stringify(screenPath)};
 import { buildRouter, compileFormScreen, compileScreen, formRouter } from '@bedrock-core/ui-compiler';
 import {
-  buildScreenOnce, charsetLang, ENCODING_MAX, ENCODING_MIN, hostFor,
+  BLOCK_SLOT_LIMIT, buildScreenOnce, charsetLang, ENCODING_MAX, ENCODING_MIN, hostFor,
   LAYOUT_PROPERTY, MAX_LAYOUT, VOCABULARY_MAX, VOCABULARY_MIN,
 } from '@bedrock-core/ui-runtime/compile';
 
@@ -198,6 +200,7 @@ export default {
   lang: charsetLang(),
   layoutProperty: LAYOUT_PROPERTY,
   maxLayout: MAX_LAYOUT,
+  blockSlotLimit: BLOCK_SLOT_LIMIT,
   windows: {
     encodingMin: ENCODING_MIN,
     encodingMax: ENCODING_MAX,

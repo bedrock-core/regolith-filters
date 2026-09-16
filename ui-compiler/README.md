@@ -10,9 +10,13 @@ fails the build naming the roots:
 
 | Root | Screen | Drawn from |
 | --- | --- | --- |
-| `<Container entity>` | a custom entity's chest screen | the vanilla chest, through a hook and the addon's router |
+| `<Container entity>` | a custom entity's container screen | the vanilla chest, through a hook and the addon's router |
+| `<Container block>` | a custom block's container screen | the vanilla data-driven container, through a second hook and the same router |
 | `<Screen>` | an action form | the library's mount, gated on the screen's title |
 | `<Form>` | a native modal form | the same mount, with the engine's own fields in place |
+
+A container screen names exactly one of the two. Everything above the root is the same either
+way, so the host says where the screen lives in the world rather than what it can do.
 
 Every screen is drawn from the pack: `render()` refuses a screen this build never compiled,
 because nothing in the pack answers to its title. A modal keeps the engine's typed controls —
@@ -87,9 +91,10 @@ under the `ui-compiler` key of its settings.
 | `screens` | `string[]` | `[]` | Further modules whose default export is a record of screens to compile, for a library the addon's declaration does not already name. Each export key names the screen |
 | `pretty` | `false \| { indent?, size? }` | `false` | How every emitted JSON UI file is laid out. Absent or `false` writes it minified. An object lays it out: `indent` is `"tab"` or `"space"` (spaces when omitted), `size` the characters per level (2 for spaces, 1 for tabs when omitted). Laid out, each file is also headed with the comment saying it is generated; minified, it is headerless too — indentation is a large share of a compiled screen's bytes |
 
-Every path — screens under `BP/scripts`, output under `RP/ui/core-ui/screens`, the chest hook at
-`RP/ui/chest_screen.json`, entities under `BP/entities`, texts under `RP/texts` — is what the
-game needs and is not a setting.
+Every path — screens under `BP/scripts`, output under `RP/ui/core-ui/screens`, the two container
+hooks at `RP/ui/chest_screen.json` and `RP/ui/data_driven_container_screen.json`, entities under
+`BP/entities`, blocks under `BP/blocks`, texts under `RP/texts` — is what the game needs and is
+not a setting.
 
 ## How a screen is discovered
 
@@ -120,12 +125,14 @@ sources like any other script.
 | `RP/ui/core-ui/screens/<namespace>_router.json` | Regolith temp | the addon's chest router: the addon's root, and one host per container screen, each gated on its layout key |
 | `RP/ui/core-ui/screens/<namespace>_forms.json` | Regolith temp | the addon's form router: one gated host per compiled form screen, picked by the title the runtime opens it with |
 | `RP/ui/chest_screen.json` | Regolith temp (edited or new copy) | the chest hook: a copy of vanilla's chest file holding one `modifications` entry, inserting the addon's root into `chest.small_chest_panel_top_half` |
+| `RP/ui/data_driven_container_screen.json` | Regolith temp (edited or new copy) | the block hook: the same one `modifications` entry, inserting the same root into `data_driven_container.panel_top_half` — the screen a custom block's container opens |
 | `RP/ui/server_form.json` | Regolith temp (edited or new copy) | the form hook, for every pack but the one that defines the mount: one `modifications` entry inserting the addon's form router into `server_form.main_screen_content` |
 | `RP/ui/core-ui/hosts/form/mount.json` | Regolith temp | written **only** by the pack that defines the mount — the library's own. Its screens are listed in `compiled_root.controls` directly |
 | `RP/ui/hud_screen.json` | Regolith temp (edited or new copy), `stamp` only | the HUD hook the stamp mounts through |
 | `RP/ui/_ui_defs.json` | Regolith temp (edited or new copy) | every file above registered, or the game never loads them |
 | `RP/texts/<locale>.lang` | Regolith temp (appended) | the character table `<Text maxLength>` decodes through; only written when a container screen has live text |
-| `BP/entities/<file>.json` | Regolith temp (edited copy) | the entity each container screen names — see [Entities](#entities) |
+| `BP/entities/<file>.json` | Regolith temp (edited copy) | the entity an entity-hosted container screen names — see [Hosts](#hosts) |
+| `BP/blocks/<file>.json` | Regolith temp (edited copy) | the block a block-hosted container screen names — see [Hosts](#hosts) |
 | `data/ui/declared.screens.ts` | Regolith temp | the screens that follow from `core.register()`: what each installed app shapes from its declaration and the manifest — the addon's page in the catalog, one config screen per section of its schema |
 | `data/ui/ui.generated.ts` | Regolith temp | one `registerCompiledScreen` call per compiled form, the `UI_REFERENCE` table of the screens nothing about which can change, `SCREEN_KEYS` and `uiReference()` |
 | `<dataPath>/ui/screens.generated.d.ts` | **the project** | the same screen keys, declared where the editor reads them: the generated module above only exists inside a Regolith run, so without this `navigate()` takes any string. Written only when the content changed |
@@ -149,11 +156,13 @@ modifying a definition the same file declares asks the engine to patch what it i
 other pack hooks vanilla's `server_form.json` instead — a `modifications` entry against another
 pack's file arrives as an unknown property and the screens never mount.
 
-## Entities
+## Hosts
 
-A container screen names the entity it opens from (`<Container entity={'core:furnace'}>`). The
-filter finds that entity's definition under `BP/entities` by its `identifier` — a screen naming
-an entity that is not there fails the build — and edits the workspace copy:
+A container screen names the entity or the block it opens from. The filter finds that host's
+definition under `BP/entities` or `BP/blocks` by its `identifier` — a screen naming a host that
+is not there fails the build — and edits the workspace copy.
+
+### An entity (`<Container entity={'core:furnace'}>`)
 
 ```jsonc
 "description": {
@@ -172,11 +181,35 @@ an entity that is not there fails the build — and edits the workspace copy:
 }
 ```
 
-Nobody keeps `inventory_size` or a layout key in step with a layout by hand — the failure mode
-of that is a screen that silently draws cells the container does not have, or an entity that
-opens the wrong screen. Everything else on the entity is yours.
+### A block (`<Container block={'core:workbench'}>`)
 
-This is also why a container screen gets no navigation key: it is reached by opening an entity,
+```jsonc
+"description": {
+  "states": {
+    // One value, because a block type opens one screen. The runtime reads this
+    // state off the permutation when a player opens the block.
+    "core:ui_layout": [ 2566 ]
+  }
+},
+"components": {
+  "minecraft:block_entity": {
+    "container": { "slot_count": 35 }, // drawn slots + live channels, 1..54
+    "dynamic_properties": true         // where the screen's state is kept
+  }
+}
+```
+
+`minecraft:block_entity` cannot vary per permutation and cannot be combined with
+`minecraft:crafting_table`; the build refuses a block that declares one. A block container holds
+54 slots at most, which is the whole of a screen's allocation — the routing sentinel, every
+`<Slot>` and `Button`, and one bank slot per character of every live `<Text maxLength>` — so a
+screen that outgrows it either sheds cells or moves to an entity, whose inventory has no cap.
+
+Nobody keeps a container size or a layout key in step with a layout by hand — the failure mode
+of that is a screen that silently draws cells the container does not have, or a host that opens
+the wrong screen. Everything else on the entity or block is yours.
+
+This is also why a container screen gets no navigation key: it is reached by opening its host,
 not by `navigate()` or a `<Link to>`. `SCREEN_KEYS` and the generated declaration carry the
 addon's form screens.
 
@@ -187,12 +220,14 @@ The filter stops the build rather than warning past a problem:
 - Two screens sharing a name, or two container screens hashing to the same layout key.
 - No namespace: neither the `namespace` setting nor `manifest: { creator, pack }` in
   `core.register()`.
-- A container screen naming an entity that is not under `BP/entities`, or two naming the same
-  entity — one entity opens one screen.
+- A container screen naming an entity that is not under `BP/entities` or a block that is not
+  under `BP/blocks`, or two naming the same host — one host opens one screen.
+- A block-hosted screen needing more than 54 container slots, or naming a block that declares
+  `minecraft:crafting_table`.
 - A `screens` module that default-exports no screens.
 - Anything the compiler refuses, relayed in its own words: a control the host has no mechanism
-  for, content past the 320 × 210 canvas, a `<Container>` with no `entity`, a `<Text>` that
-  changes with state but is baked into the layout or into a button's face, a host that moved a
-  face it was only meant to stand in.
+  for, content past the 320 × 210 canvas, a `<Container>` naming neither `entity` nor `block` or
+  naming both, a `<Text>` that changes with state but is baked into the layout or into a button's
+  face, a host that moved a face it was only meant to stand in.
 
 No `*.screen.tsx` under `BP/scripts` and no `screens` setting is an info-level no-op.
