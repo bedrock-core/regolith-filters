@@ -1,4 +1,4 @@
-// Generated screen modules — one per guide page and one for the home index —
+// Generated screen modules — one per guide page, the entry and the index —
 // dropped into the addon's scripts so the ui-compiler filter compiles each as
 // a form-action screen and the bundler ships it like any authored screen.
 //
@@ -32,11 +32,14 @@ export interface GuideScreensInput {
   components?: string;
 }
 
-/** The home index's screen name; no page may fold to it. */
+/** Where a guide opens: its home page, or its index when it has none. No page may fold to it. */
 export const HOME_SCREEN = 'guide_home';
 
-/** The index with a back button — the screen a host that opened the guide shows in place of the index. */
+/** The entry with a back control: the screen a host that opened the guide shows in its place. */
 export const HOME_BACK_SCREEN = 'guide_home_back';
+
+/** The index every page's back and index button open. No page may fold to it. */
+export const INDEX_SCREEN = 'guide_index';
 
 /** `getting-started/intro` → `guide_getting_started_intro`. */
 export const guideScreenName = (pageId: string): string =>
@@ -59,7 +62,7 @@ export function guideScreenModules({ pageIds, screensDir, manifestPath, title, c
   const registry = components === undefined ? undefined : specifierFrom(screensDir, components.replace(/\.tsx?$/, ''));
   const registryImport = registry === undefined ? '' : `import components from ${JSON.stringify(registry)};\n`;
   const pageOptions = `{ title: ${JSON.stringify(title)}${registry === undefined ? '' : ', components'} }`;
-  const owners = new Map<string, string>([[HOME_SCREEN, '(the home index)'], [HOME_BACK_SCREEN, '(the home index with a back button)']]);
+  const owners = new Map<string, string>([[HOME_SCREEN, '(the guide entry)'], [HOME_BACK_SCREEN, '(the guide entry with a back control)'], [INDEX_SCREEN, '(the guide index)']]);
   const modules: GuideScreenModule[] = [{
     file: toPosix(path.join(screensDir, `${HOME_SCREEN}.screen.tsx`)),
     source: `${HEADER}import manifest from ${JSON.stringify(specifier)};\n`
@@ -85,14 +88,20 @@ export function guideScreenModules({ pageIds, screensDir, manifestPath, title, c
     });
   }
 
-  // Last, after the pages: the index again, with a back button that leaves
-  // the guide — a screen's shape is fixed, so the index a host opens and
-  // returns from is a second screen rather than a state of the first.
+  // Last, after the pages: the entry again, with a back control that leaves
+  // the guide — a screen's shape is fixed, so the entry a host opens is a
+  // second screen rather than a state of the first — and the index the pages
+  // return to.
   modules.push({
     file: toPosix(path.join(screensDir, `${HOME_BACK_SCREEN}.screen.tsx`)),
     source: `${HEADER}import manifest from ${JSON.stringify(specifier)};\n`
       + 'import { guideHomeBackScreen } from \'@bedrock-core/guides\';\n\n'
       + `export default guideHomeBackScreen(manifest, { title: ${JSON.stringify(title)} });\n`,
+  }, {
+    file: toPosix(path.join(screensDir, `${INDEX_SCREEN}.screen.tsx`)),
+    source: `${HEADER}import manifest from ${JSON.stringify(specifier)};\n`
+      + 'import { guideIndexScreen } from \'@bedrock-core/guides\';\n\n'
+      + `export default guideIndexScreen(manifest, { title: ${JSON.stringify(title)} });\n`,
   });
 
   return modules;

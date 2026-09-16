@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { guideScreenModules, guideScreenName, HOME_BACK_SCREEN, HOME_SCREEN } from '../lib/screens.ts';
+import { guideScreenModules, guideScreenName, HOME_BACK_SCREEN, HOME_SCREEN, INDEX_SCREEN } from '../lib/screens.ts';
 
 const input = {
   pageIds: ['intro', 'getting-started/installation'],
@@ -15,7 +15,7 @@ describe('guideScreenModules', () => {
     expect(guideScreenName('Intro')).toBe('guide_intro');
   });
 
-  it('emits the home index plus one module per page, pages sorted', () => {
+  it('emits the entry, one module per page with pages sorted, then the back entry and the index', () => {
     const files = guideScreenModules(input).map(module => module.file);
 
     expect(files).toEqual([
@@ -23,6 +23,7 @@ describe('guideScreenModules', () => {
       'BP/scripts/guides/guide_getting_started_installation.screen.tsx',
       'BP/scripts/guides/guide_intro.screen.tsx',
       `BP/scripts/guides/${HOME_BACK_SCREEN}.screen.tsx`,
+      `BP/scripts/guides/${INDEX_SCREEN}.screen.tsx`,
     ]);
   });
 
@@ -44,6 +45,7 @@ describe('guideScreenModules', () => {
 
   it('refuses two pages that fold to one screen', () => {
     expect(() => guideScreenModules({ ...input, pageIds: ['a-b', 'a_b'] })).toThrow(/"a-b" and "a_b"/);
-    expect(() => guideScreenModules({ ...input, pageIds: ['home'] })).toThrow(/the home index/);
+    expect(() => guideScreenModules({ ...input, pageIds: ['home'] })).toThrow(/the guide entry/);
+    expect(() => guideScreenModules({ ...input, pageIds: ['index'] })).toThrow(/the guide index/);
   });
 });
