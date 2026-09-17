@@ -82,9 +82,6 @@ export function buildLocale({
     const icon = typeof parsed.frontmatter.icon === 'string' && parsed.frontmatter.icon !== ''
       ? parsed.frontmatter.icon
       : undefined;
-    if (icon !== undefined && icon.length > 80) {
-      report.warn(pageId, `icon "${icon}" exceeds 80 characters — the serializer truncates texture paths at 80`);
-    }
 
     // The subtitle renders through localizationKey, which can't carry a § prefix — so the muted
     // grey is baked into the value (like admonition titles). A leading §7 the author can still

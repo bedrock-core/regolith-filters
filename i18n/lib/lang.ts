@@ -43,26 +43,6 @@ export function stripGeneratedSection(content: string): string {
 }
 
 /**
- * The subset a behavior pack needs: the addon's OWN `meta` branch, already in
- * real-key form (`<namespace>.meta.*`).
- *
- * A pack's manifest `header.name` / `header.description` resolve from THAT
- * pack's own `texts/<locale>.lang`, so the BP needs the display strings in its
- * own file — but only those. Library keys never match: they carry their
- * library's namespace, not the addon's.
- *
- * Empty when the addon declares no `meta` branch.
- */
-export function selectMetaEntries(entries: Map<string, string>, namespace: string): Map<string, string> {
-  const branch = `${namespace}.${META_BRANCH}`;
-  const out = new Map<string, string>();
-  for (const [key, value] of entries) {
-    if (key === branch || key.startsWith(`${branch}.`)) out.set(key, value);
-  }
-  return out;
-}
-
-/**
  * Replace/append the generated section. Keys are emitted sorted for
  * deterministic output. `.lang` values must be single-line — enforced here
  * as a last line of defense (flattenResources rejects newlines first).

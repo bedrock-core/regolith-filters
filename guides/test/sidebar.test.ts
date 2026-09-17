@@ -142,13 +142,6 @@ describe('buildManifest', () => {
     const cat = manifest.tree.find((n: any) => n.t === 'cat');
     expect(cat.icon).toBe('textures/ui/config/home');
   });
-
-  it('warns when an icon path exceeds the 80-character serializer limit', () => {
-    const longIcon = `textures/ui/${'x'.repeat(80)}`;
-    const files = new Map([['intro', `---\ntitle: Introduction\nicon: ${longIcon}\n---\n\nHi.\n`]]);
-    const { report } = build({ files, categories: new Map() });
-    expect(report.warnings.some((w: string) => w.includes('80'))).toBe(true);
-  });
 });
 
 describe('buildManifest access', () => {

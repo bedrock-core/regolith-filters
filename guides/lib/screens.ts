@@ -95,8 +95,8 @@ export function guideScreenModules({ pageIds, screensDir, manifestPath, title, c
   modules.push({
     file: toPosix(path.join(screensDir, `${HOME_BACK_SCREEN}.screen.tsx`)),
     source: `${HEADER}import manifest from ${JSON.stringify(specifier)};\n`
-      + 'import { guideHomeBackScreen } from \'@bedrock-core/guides\';\n\n'
-      + `export default guideHomeBackScreen(manifest, { title: ${JSON.stringify(title)} });\n`,
+      + 'import { guideHomeScreen } from \'@bedrock-core/guides\';\n\n'
+      + `export default guideHomeScreen(manifest, { title: ${JSON.stringify(title)}, back: true });\n`,
   }, {
     file: toPosix(path.join(screensDir, `${INDEX_SCREEN}.screen.tsx`)),
     source: `${HEADER}import manifest from ${JSON.stringify(specifier)};\n`

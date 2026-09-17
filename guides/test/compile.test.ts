@@ -29,23 +29,25 @@ function page(
 describe('block compilation', () => {
   it('compiles headings with clamped levels and paragraph keys in document order', () => {
     const { blocks, lang } = page('# Title\n\n## Section\n\nBody text.\n\n#### Deep\n');
-    // the leading h1 is the page title, not a block
+    // the leading h1 names the page and stays in the body as authored
     expect(lang.get('bcg.test.page.title')).toBe('Title');
     expect(blocks).toEqual([
-      { t: 'h', l: 2, k: 'bcg.test.page.b0' },
-      { t: 'p', runs: [{ k: 'bcg.test.page.b1.r0' }] },
-      { t: 'h', l: 3, k: 'bcg.test.page.b2' },
+      { t: 'h', l: 1, k: 'bcg.test.page.b0' },
+      { t: 'h', l: 2, k: 'bcg.test.page.b1' },
+      { t: 'p', runs: [{ k: 'bcg.test.page.b2.r0' }] },
+      { t: 'h', l: 3, k: 'bcg.test.page.b3' },
     ]);
-    expect(lang.get('bcg.test.page.b1.r0')).toBe('Body text.');
+    expect(lang.get('bcg.test.page.b2.r0')).toBe('Body text.');
   });
 
-  it('prefers the frontmatter title, and still takes the leading h1 out of the body', () => {
-    // `title:` names the page for the sidebar and the header. A leading h1 names it too, so
-    // keeping both printed it twice — once in the header, once as the first block of prose.
+  it('prefers the frontmatter title for the header, and renders the body as authored', () => {
     const { blocks, lang } = page('---\ntitle: Custom\n---\n\n# Graves\n\nBody.\n');
     expect(lang.get('bcg.test.page.title')).toBe('Custom');
-    expect(blocks).toEqual([{ t: 'p', runs: [{ k: 'bcg.test.page.b0.r0' }] }]);
-    expect(lang.get('bcg.test.page.b0.r0')).toBe('Body.');
+    expect(blocks).toEqual([
+      { t: 'h', l: 1, k: 'bcg.test.page.b0' },
+      { t: 'p', runs: [{ k: 'bcg.test.page.b1.r0' }] },
+    ]);
+    expect(lang.get('bcg.test.page.b1.r0')).toBe('Body.');
   });
 
   it('leaves a NON-leading h1 alone — only the page title is special', () => {

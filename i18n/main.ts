@@ -3,10 +3,9 @@
 // truth for the addon's text. This filter generates everything downstream:
 //   1. RP/texts/<locale>.lang — namespaced entries the client resolves per
 //      player (marker-delimited section, coexists with the guides filter),
-//   1b. BP/texts/<locale>.lang — the `meta.*` keys ONLY, because a pack's
-//      manifest header.name/description resolve from that pack's own texts;
-//      both packs also get `pack.name`/`pack.description` aliases, the only
-//      two keys Bedrock's manifest lookup actually recognises,
+//   1b. BP/texts/<locale>.lang — `pack.name` and `pack.description` only, the
+//      two keys Bedrock resolves a manifest header from, taken from the
+//      addon's `meta.name` / `meta.description`; the RP gets them too,
 //   2. data/i18n/i18n.generated.json — the runtime bundle (flat per-locale
 //      tables in {{var}} form + recorded argument order), written in the
 //      Regolith temp workspace and inlined by the bundler via the
@@ -16,7 +15,7 @@
 //
 // Library resources (dependencies declaring bedrockCore.i18n) fold in under
 // their namespace branch; vanilla keys are typed always, bundled only where
-// referenced, and never emitted into the RP.
+// referenced, and emitted into the RP only where the addon overrides them.
 //
 // MUST run BEFORE the bundler filter, and after guides if you use it.
 
@@ -25,7 +24,7 @@ import path from 'node:path';
 
 import { bundleDtsText } from './lib/dts.ts';
 import { flattenNesting, templateVars, toPositional } from './lib/interp.ts';
-import { manifestAliasEntries, parseLang, selectMetaEntries, stripGeneratedSection, upsertGeneratedSection } from './lib/lang.ts';
+import { manifestAliasEntries, parseLang, stripGeneratedSection, upsertGeneratedSection } from './lib/lang.ts';
 import { discoverI18nLibs, libLocaleFiles, type I18nLib } from './lib/libs.ts';
 import { loadTsModule } from './lib/load.ts';
 import { scanNamespace, scanVanillaUsage, walkSources } from './lib/scan.ts';
@@ -340,18 +339,21 @@ async function main(): Promise<void> {
     console.log(`📚 library namespace "${ns}" (${group.names.join(', ')}): ${group.allPaths.size} keys, ${group.byLocale.size} locales`);
   }
 
-  // ── Split own resources: root keys vs library overrides vs reserved ───────
+  // ── Split own resources: root keys vs library and vanilla overrides ───────
   const own = new Map<string, Map<string, string>>();
   /** locale → ns-prefixed path → template */
   const overrides = new Map<string, Map<string, string>>();
+  /** locale → vanilla key (no `vanilla.` prefix) → the addon's replacement string */
+  const vanillaOverrides = new Map<string, Map<string, string>>();
 
   for (const locale of locales) {
     const roots = new Map<string, string>();
     const over = new Map<string, string>();
+    const vanillaOver = new Map<string, string>();
     for (const [p, v] of ownRaw.get(locale) ?? []) {
       const first = p.split('.')[0]!;
       if (first === 'vanilla') {
-        report.error(`[${locale}] ${p}`, 'the "vanilla" branch is reserved — those strings already ship with the client');
+        vanillaOver.set(p.slice('vanilla.'.length), v);
         continue;
       }
       const group = libGroups.get(first);
@@ -368,6 +370,7 @@ async function main(): Promise<void> {
     }
     own.set(locale, roots);
     overrides.set(locale, over);
+    vanillaOverrides.set(locale, vanillaOver);
   }
 
   // The default locale is proven present above, so this is always a table.
@@ -461,6 +464,12 @@ async function main(): Promise<void> {
       for (const key of used) entries.set(`vanilla.${key}`, table[key] ?? vanillaDefault[key] ?? key);
       vanillaEntries.set(locale, entries);
     }
+
+    for (const [locale, over] of vanillaOverrides) {
+      for (const key of over.keys()) {
+        if (!vanillaKeySet.has(key)) problem(`[${locale}] vanilla.${key}`, 'no vanilla string has this key — overrides must target existing keys');
+      }
+    }
   }
 
   if (errorCount > 0) {
@@ -534,16 +543,12 @@ async function main(): Promise<void> {
   }
 
   // ── Emit .lang sections ───────────────────────────────────────────────────
-  // The RP gets everything; the BP gets the addon's own `meta.*` and nothing
-  // else. A manifest's header.name/description are resolved from THAT pack's
-  // own texts/<locale>.lang, so the behavior pack needs the display strings in
-  // its own file — but only those: shipping the addon's whole UI vocabulary
-  // twice would be waste.
-  //
-  // Bedrock's manifest lookup is not a general key lookup: it fires only for
-  // the literal keys `pack.name` / `pack.description`. So both packs also get
-  // those two as aliases of `meta.name` / `meta.description` — the namespaced
-  // originals stay, since that is what `key()` and the runtime bundle use.
+  // The RP gets everything, plus the vanilla strings the addon overrides under
+  // their own keys. The BP gets `pack.name` / `pack.description` and nothing
+  // else: a manifest's header.name/description resolve from THAT pack's own
+  // texts/<locale>.lang, and Bedrock's lookup fires only for those two literal
+  // keys. Both are copies of `meta.name` / `meta.description`, which stay
+  // namespaced in the RP for `key()` and the runtime bundle.
   let wroteBp = false;
   for (const locale of locales) {
     const entries = new Map<string, string>();
@@ -557,11 +562,10 @@ async function main(): Promise<void> {
     }
     const aliases = manifestAliasEntries(entries, namespace);
 
-    writeLangSection('RP', locale, new Map([...entries, ...aliases]));
+    writeLangSection('RP', locale, new Map([...entries, ...(vanillaOverrides.get(locale) ?? []), ...aliases]));
 
-    const metaEntries = selectMetaEntries(entries, namespace);
-    if (metaEntries.size > 0) {
-      writeLangSection('BP', locale, new Map([...metaEntries, ...aliases]));
+    if (aliases.size > 0) {
+      writeLangSection('BP', locale, aliases);
       wroteBp = true;
     } else {
       clearLangSection('BP', locale);
@@ -589,7 +593,10 @@ async function main(): Promise<void> {
     locales: {},
   };
   for (const locale of locales) {
-    const merged = { ...Object.fromEntries(tables.get(locale) ?? []), ...Object.fromEntries(vanillaEntries.get(locale) ?? []) };
+    const merged: Record<string, string> = { ...Object.fromEntries(tables.get(locale) ?? []), ...Object.fromEntries(vanillaEntries.get(locale) ?? []) };
+    for (const [key, value] of vanillaOverrides.get(locale) ?? []) {
+      if (merged[`vanilla.${key}`] !== undefined) merged[`vanilla.${key}`] = value;
+    }
     bundle.locales[locale] = Object.fromEntries(Object.keys(merged).sort().map((k) => [k, merged[k]!]));
   }
   const bundlePath = path.join(srcRoot, 'i18n.generated.json');

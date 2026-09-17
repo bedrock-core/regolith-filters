@@ -1,7 +1,7 @@
 // The BP side of the .lang emit. A pack's manifest header.name/description are
 // translation keys Bedrock resolves from THAT pack's own texts/<locale>.lang,
-// so the behavior pack needs the addon's `meta.*` strings in its own file —
-// and only those.
+// and only for the literal keys `pack.name` / `pack.description`, so those
+// two are all the behavior pack gets.
 //
 // The end-to-end cases drive main.js exactly as Regolith does (ROOT_DIR + a
 // working directory holding RP/, BP/ and data/), with `vanilla: false` so the
@@ -14,7 +14,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { manifestAliasEntries, parseLang, selectMetaEntries, stripGeneratedSection } from '../lib/lang.ts';
+import { manifestAliasEntries, parseLang, stripGeneratedSection } from '../lib/lang.ts';
 
 const MAIN = fileURLToPath(new URL('../main.ts', import.meta.url));
 const NAMESPACE = 'drav0011_shop';
@@ -56,28 +56,6 @@ const WITH_META = `{
   shop: { title: 'Shop', bought: 'You bought {{item}}' },
 }`;
 
-describe('selectMetaEntries', () => {
-  it('keeps the addon\'s own meta branch and nothing else', () => {
-    const entries = new Map([
-      [`${NAMESPACE}.meta.name`, 'Shop'],
-      [`${NAMESPACE}.meta.description`, 'Sells items'],
-      [`${NAMESPACE}.shop.title`, 'Shop'],
-      [`${NAMESPACE}.metadata.title`, 'Not meta'],
-    ]);
-    expect([...selectMetaEntries(entries, NAMESPACE).keys()].sort())
-      .toEqual([`${NAMESPACE}.meta.description`, `${NAMESPACE}.meta.name`]);
-  });
-
-  it('never picks up a library\'s keys, meta branch or not', () => {
-    const entries = new Map([['core.meta.name', 'Core'], ['core.addons.title', 'Addons']]);
-    expect(selectMetaEntries(entries, NAMESPACE).size).toBe(0);
-  });
-
-  it('is empty when the addon declares no meta branch', () => {
-    expect(selectMetaEntries(new Map([[`${NAMESPACE}.shop.title`, 'Shop']]), NAMESPACE).size).toBe(0);
-  });
-});
-
 describe('manifestAliasEntries', () => {
   it('mirrors name/description onto the literal keys Bedrock resolves', () => {
     const entries = new Map([
@@ -100,15 +78,12 @@ describe('manifestAliasEntries', () => {
 });
 
 describe('BP/texts emit', () => {
-  it('writes the meta keys to the BP and the full set to the RP', () => {
+  it('writes pack.name and pack.description to the BP and the full set to the RP', () => {
     const work = scaffold(WITH_META);
     const log = run(work);
 
+    // Bedrock only resolves a manifest header from these two literal keys.
     expect(parseLang(read(work, 'BP/texts/en_US.lang'))).toEqual({
-      [`${NAMESPACE}.meta.name`]: 'Shop',
-      [`${NAMESPACE}.meta.description`]: 'Sells items',
-      [`${NAMESPACE}.meta.creator`]: 'DrAv0011',
-      // Bedrock only resolves a manifest header from these two literal keys.
       'pack.name': 'Shop',
       'pack.description': 'Sells items',
     });
@@ -124,7 +99,7 @@ describe('BP/texts emit', () => {
       'pack.description',
       'pack.name',
     ]);
-    expect(log).toContain('✅ BP/texts/en_US.lang — 5 generated keys');
+    expect(log).toContain('✅ BP/texts/en_US.lang — 2 generated keys');
   });
 
   it('preserves hand-written BP entries outside the markers', () => {
@@ -134,7 +109,7 @@ describe('BP/texts emit', () => {
     const content = read(work, 'BP/texts/en_US.lang');
     expect(stripGeneratedSection(content).trim()).toBe('my.hand.written=Kept');
     expect(parseLang(content)['my.hand.written']).toBe('Kept');
-    expect(parseLang(content)[`${NAMESPACE}.meta.name`]).toBe('Shop');
+    expect(parseLang(content)['pack.name']).toBe('Shop');
   });
 
   it('is idempotent, and never re-ingests its own BP keys as passthrough', () => {
@@ -146,7 +121,7 @@ describe('BP/texts emit', () => {
     expect(read(work, 'BP/texts/en_US.lang')).toBe(first);
 
     // The `extra` passthrough strips generated sections before reading, so the
-    // meta keys ride the tables only — never both.
+    // generated keys ride the tables only — never both.
     const bundle = JSON.parse(read(work, 'data/i18n/i18n.generated.json'));
     expect(bundle.extra.en_US).toEqual({ 'my.hand.written': 'Kept' });
   });
@@ -157,7 +132,6 @@ describe('BP/texts emit', () => {
     });
     run(work);
 
-    expect(parseLang(read(work, 'BP/texts/es_ES.lang'))[`${NAMESPACE}.meta.name`]).toBe('Tienda');
     expect(parseLang(read(work, 'BP/texts/es_ES.lang'))['pack.name']).toBe('Tienda');
     expect(parseLang(read(work, 'RP/texts/es_ES.lang'))['pack.description']).toBe('Vende objetos');
     expect(JSON.parse(read(work, 'BP/texts/languages.json'))).toEqual(['en_US', 'es_ES']);
@@ -177,11 +151,22 @@ describe('BP/texts emit', () => {
   it('drops a stale generated section when the meta branch goes away', () => {
     const work = scaffold(WITH_META, { 'BP/texts/en_US.lang': 'my.hand.written=Kept\n' });
     run(work);
-    expect(read(work, 'BP/texts/en_US.lang')).toContain(`${NAMESPACE}.meta.name`);
+    expect(read(work, 'BP/texts/en_US.lang')).toContain('pack.name');
 
     fs.writeFileSync(path.join(work, 'data', 'i18n', 'en_US.ts'), "export default { shop: { title: 'Shop' } } as const;\n", 'utf-8');
     run(work);
 
     expect(read(work, 'BP/texts/en_US.lang').trim()).toBe('my.hand.written=Kept');
+  });
+});
+
+describe('vanilla overrides', () => {
+  it('writes an overridden vanilla string to the RP under its own key', () => {
+    const work = scaffold("{ shop: { title: 'Shop' }, vanilla: { item: { apple: { name: 'Golden Snack' } } } }");
+    run(work);
+
+    const rp = parseLang(read(work, 'RP/texts/en_US.lang'));
+    expect(rp['item.apple.name']).toBe('Golden Snack');
+    expect(rp[`${NAMESPACE}.vanilla.item.apple.name`]).toBeUndefined();
   });
 });
