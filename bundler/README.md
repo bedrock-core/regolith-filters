@@ -1,129 +1,34 @@
-# Bundler
+# bundler
 
-A Regolith filter for bundling TypeScript files into a single JavaScript file for Minecraft Bedrock Edition.
+A Regolith filter that bundles an addon's TypeScript from `BP/scripts/` into the single `main.js`
+Minecraft executes, with esbuild. It resolves entry points from the project's own `tsconfig.json`,
+marks the `@minecraft/*` script modules as external, and reads `jsxImportSource` off that same
+`tsconfig.json` so a JSX runtime such as `@bedrock-core/ui` needs no manual esbuild configuration.
+It is the [`core`](../core/README.md) stack's last stage: it inlines what every earlier stage
+generated and strips the `.ts` sources from the shipped pack.
 
-## Overview
-
-This filter enables TypeScript development in Regolith projects by automatically bundling your TypeScript code from `packs/BP/scripts/` into a single `main.js` file that Minecraft can execute.
-
-Built from [gametests](https://github.com/Bedrock-OSS/regolith-filters/tree/master/gametests) filter
-
-## Differences from Gametests Filter
-
-If you're coming from the [gametests](https://github.com/Bedrock-OSS/regolith-filters/tree/master/gametests) filter:
-
-- ✅ **Simpler structure**: Uses `packs/BP/scripts/` instead of `data/gametests/` folder
-- ✅ **Project root workflow**: Install dependencies and manage everything from your project root
-- ✅ **Package manager agnostic**: Not hardcoded to npm - use any package manager
-- ✅ **Focused scope**: Only handles bundling - you manage `tsconfig.json`, `launch.json`, and `manifest.json`
-
-## Installation
-
-Install the filter using Regolith:
+## Install
 
 ```bash
 regolith install github.com/bedrock-core/regolith-filters/bundler
 ```
 
-## Requirements
-
-1. **tsconfig.json** - Create a `tsconfig.json` in your project root
-2. **package.json** - Set up your dependencies and TypeScript types
-3. **packs/BP/scripts/** - Place your TypeScript files here
-
-## Configuration
-
-The filter accepts optional settings:
-
-### Settings
-
-- **`tsConfigPath`** _(string, default: `"tsconfig.json"`)_ - Path to your tsconfig.json file relative to the project root
-- **`debug`** _(boolean, default: `false`)_ - Enable debug mode with source maps, no minification, and readable output
-
-### Example with Custom Settings
-
-```json
+```jsonc
 {
   "filter": "bundler",
   "settings": {
-    "tsConfigPath": "tsconfig.build.json",
     "debug": true
   }
 }
 ```
 
-### Debug Mode
+`debug` adds source maps, disables minification and keeps function names, for a development
+profile — a release profile omits it.
 
-When `debug: true` is enabled:
+A `*.screen.tsx` module is bundled with the [`ui-compiler`](../ui-compiler/README.md) filter's
+conditional rewrite, so a pack with screens needs `ui-compiler` installed beside this filter. A pack
+without screens does not.
 
-- ✅ Source maps are generated (`BP/scripts/main.js.map`)
-- ✅ No minification - readable output code
-- ✅ Function names are preserved (`keepNames`)
-- ✅ Verbose logging enabled
-- ✅ Build metadata generated
+## Documentation
 
-## How It Works
-
-1. **Regolith runs** the filter in a temp folder (`.regolith/tmp/<profile>/`)
-2. **Filter reads** your `tsconfig.json` from the project root
-3. **Entry points** are resolved from tsconfig patterns (or defaults to `BP/scripts/**/*.ts`)
-4. **esbuild bundles** all TypeScript files into `BP/scripts/main.js`
-5. **Cleanup** removes source `.ts` files from the output
-6. **Done!** Your bundled JavaScript is ready in the temp folder
-
-## Entry Point Resolution
-
-The filter respects your `tsconfig.json` configuration:
-
-- **If `files` is set** - Uses those specific files
-- **If `include` is set** - Uses those glob patterns
-- **Otherwise** - Defaults to all `.ts` files in `BP/scripts/`
-
-The filter automatically adjusts paths to work within Regolith's temp folder structure.
-
-## External Modules
-
-The following Minecraft modules are automatically marked as external (not bundled):
-
-- `@minecraft/server`
-- `@minecraft/server-ui`
-- `@minecraft/server-gametest`
-- `@minecraft/server-net`
-- `@minecraft/server-admin`
-- `@minecraft/debug-utilities`
-
-## Troubleshooting
-
-### "tsconfig.json not found"
-
-- Ensure `tsconfig.json` exists in your project root (same level as `config.json`)
-
-### "No TypeScript files found"
-
-- Check your tsconfig's `include` patterns
-- Ensure TypeScript files exist in `BP/scripts/`
-- Check `exclude` patterns aren't blocking your files
-
-### "Build output file not created"
-
-- Check for TypeScript compilation errors
-- Ensure your entry points are valid
-- Check esbuild output for specific errors
-
-## Changelog
-
-### 1.1.1
-
-- Fixed resolution of npm packages that do not expose an `exports` field (e.g. `cannon-es`). Setting esbuild `platform: "neutral"` silently clears `mainFields`, breaking packages that only ship `main`/`module`. Now explicitly restores `mainFields: ["module", "main"]`.
-
-### 1.1.0
-
-- Automatic JSX transform — the filter now reads `jsxImportSource` from your `tsconfig.json` (or its `extends` chain) and configures esbuild's JSX transform automatically. No manual esbuild options are needed when using `@bedrock-core/ui` or any other JSX runtime.
-
-### 1.0.1
-
-- Fixed folders not being removed after bundling
-
-### 1.0.0
-
-- Release
+https://bedrock-core.drav.dev/docs/filters/bundler

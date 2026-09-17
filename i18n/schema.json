@@ -22,8 +22,8 @@
 		},
 		"vanilla": {
 			"type": "boolean",
-			"default": true,
-			"description": "Generate the $.vanilla.* key tree and bundle the vanilla strings your scripts reference. Vanilla strings are never emitted into the RP either way."
+			"default": false,
+			"description": "Generate the $.vanilla.* key tree and bundle the vanilla strings your scripts reference. Vanilla strings are never emitted into the RP either way. Off by default because it fetches and diffs the vanilla lang files on every build."
 		},
 		"vanillaLangUrlTemplate": {
 			"type": "string",
@@ -39,6 +39,20 @@
 			"type": "boolean",
 			"default": true,
 			"description": "Fail the build on check violations (locale parity, variable drift, invalid overrides…) instead of warning."
+		},
+		"pretty": {
+			"description": "How generated JSON is laid out. Absent or false writes it minified. An object lays it out: `indent` is \"tab\" or \"space\" (spaces when omitted), `size` the characters per level (2 for spaces, 1 for tabs when omitted).",
+			"oneOf": [
+				{ "const": false },
+				{
+					"type": "object",
+					"properties": {
+						"indent": { "enum": ["tab", "space"] },
+						"size": { "type": "integer", "minimum": 1 }
+					},
+					"additionalProperties": false
+				}
+			]
 		}
 	}
 }

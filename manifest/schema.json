@@ -18,6 +18,20 @@
         }
       ],
       "default": "BP/manifest.json"
+    },
+    "pretty": {
+      "description": "How generated JSON is laid out. Absent or false writes it minified. An object lays it out: `indent` is \"tab\" or \"space\" (spaces when omitted), `size` the characters per level (2 for spaces, 1 for tabs when omitted).",
+      "oneOf": [
+        { "const": false },
+        {
+          "type": "object",
+          "properties": {
+            "indent": { "enum": ["tab", "space"] },
+            "size": { "type": "integer", "minimum": 1 }
+          },
+          "additionalProperties": false
+        }
+      ]
     }
   }
 }

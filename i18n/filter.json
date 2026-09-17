@@ -4,7 +4,7 @@
 		{
 			"name": "Compile i18n Resources",
 			"runWith": "nodejs",
-			"script": "./main.js"
+			"script": "./main.ts"
 		}
 	]
 }

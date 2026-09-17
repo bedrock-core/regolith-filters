@@ -1,0 +1,10 @@
+{
+	"description": "Runs the whole Bedrock Core filter stack — manifest, generator, guides, i18n, ui-compiler, bundler — in the order they depend on.",
+	"filters": [
+		{
+			"name": "Bedrock Core Stack",
+			"runWith": "nodejs",
+			"script": "./main.ts"
+		}
+	]
+}

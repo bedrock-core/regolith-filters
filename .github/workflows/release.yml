@@ -1,0 +1,86 @@
+name: Release
+
+# Changesets for versions and changelogs, git tags instead of npm: the same two-job
+# shape as every other bedrock-core repository.
+#
+# Author changesets during development (`npm run changeset`).
+#
+#   • push to `main` with changesets pending → the action opens/updates a
+#     "Version Packages" PR that bumps the changed filters, writes their
+#     changelogs and refreshes every lockfile. Nothing is tagged from a push.
+#   • Run this workflow by hand on `main` (Actions → Release → Run workflow)
+#     after that PR has merged → every filter whose version has no tag yet is
+#     tagged `<filter>-<version>`, the tag Regolith installs, and gets a GitHub
+#     release from its changelog.
+#
+# NOTE: opening the Version PR needs "Allow GitHub Actions to create and approve
+# pull requests" enabled under Settings → Actions → General.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+permissions:
+  contents: write        # push the version-bump branch, tags and releases
+  pull-requests: write   # open and update the "Version Packages" PR
+
+jobs:
+  version:
+    name: Open or refresh the Version PR
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: 'npm'
+
+      - run: npm ci
+
+      # No tagging input: with changesets pending this opens the PR, and with
+      # none pending it does nothing.
+      - uses: changesets/action@v2
+        with:
+          version-script: npm run version-packages
+          commit-message: 'chore(release): version filters'
+          pr-title: 'chore(release): version filters'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  tag:
+    name: Tag the filters
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Refuse anything but main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "Filters are tagged from main only; this run is on ${GITHUB_REF}."
+          exit 1
+
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      # An annotated tag records who cut it.
+      - name: Tag as the release bot
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+      - run: npm run release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

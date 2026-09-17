@@ -4,7 +4,7 @@
     {
       "name": "Generate templates",
       "runWith": "nodejs",
-      "script": "./main.js"
+      "script": "./main.ts"
     }
   ]
 }

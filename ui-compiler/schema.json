@@ -1,0 +1,50 @@
+{
+	"$schema": "http://json-schema.org/draft-07/schema#",
+	"title": "ui-compiler filter settings",
+	"type": "object",
+	"additionalProperties": false,
+	"properties": {
+		"namespace": {
+			"type": "string",
+			"pattern": "^[a-z0-9_]+$",
+			"description": "The addon's namespace. It prefixes every screen's JSON UI namespace as <namespace>_<name>, so an addon's UI carries its own name and never collides with another addon's. Left unset, it is read from the creator/pack in core.register(), the way the other filters resolve it."
+		},
+		"stamp": {
+			"type": "boolean",
+			"default": false,
+			"description": "Draw a build stamp at the HUD's top-left — a short hash of every compiled screen plus the build clock — so a running client shows which build it is rendering."
+		},
+		"screens": {
+			"type": "array",
+			"items": {
+				"type": "string"
+			},
+			"default": [],
+			"description": "Modules whose default export is a record of screens to compile besides the addon's own *.screen.tsx files — a library's generic screens. The bedrock-core apps are added from the register call and need no entry here. Each export key names the screen."
+		},
+		"pretty": {
+			"description": "How generated JSON is laid out. Absent or false writes it minified. An object lays it out: `indent` is \"tab\" or \"space\" (spaces when omitted), `size` the characters per level (2 for spaces, 1 for tabs when omitted).",
+			"oneOf": [
+				{
+					"const": false
+				},
+				{
+					"type": "object",
+					"properties": {
+						"indent": {
+							"enum": [
+								"tab",
+								"space"
+							]
+						},
+						"size": {
+							"type": "integer",
+							"minimum": 1
+						}
+					},
+					"additionalProperties": false
+				}
+			]
+		}
+	}
+}

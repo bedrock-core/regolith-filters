@@ -1,12 +1,16 @@
 {
   "name": "@bedrock-core/regolith-filters_generator",
   "version": "1.1.1",
+  "private": true,
   "description": "Regolith filter that generates Minecraft JSON from TypeScript templates, typed against the official Mojang schemas.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18.0"
+  },
   "dependencies": {
     "esbuild": "^0.25.10",
     "glob": "^10.3.1",
     "json-schema-to-typescript": "^15.0.4",
     "json5": "^2.2.1"
-  },
-  "packageManager": "yarn@4.9.4"
+  }
 }
