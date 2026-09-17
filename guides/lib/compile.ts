@@ -4,7 +4,7 @@
 // nothing else — the same walk runs for every locale, so identical structure
 // yields identical keys (see lib/keys.js).
 
-import { type InlineRun, compileInline } from './inline.ts';
+import { type InlineText, compileInline } from './inline.ts';
 
 /** :::kind — Docusaurus admonition kinds ('caution' is a legacy warning alias). */
 const ADMONITION_KINDS = {
@@ -140,23 +140,28 @@ export function compilePage(
 
   const inlineText = (children: MdastNode[]) => compileInline(children, inlineCtx);
 
-  /** Runs → GuideRun[] with keys minted under `basePath` (§-styling, incl. link color, already baked in by compileInline). */
-  const emitRuns = (runs: InlineRun[], basePath: string): any[] => runs.map((run, i) => {
-    const k = ctx.key(`${basePath}.r${i}`);
-    lang.set(k, run.text);
-    return run.to !== undefined ? { k, to: run.to } : { k };
-  });
+  /** Inline content → its key minted at `path` (§-styling, incl. link color, already baked in), and its link spans. */
+  const emitInline = ({ text, links }: InlineText, path: string): Record<string, any> => {
+    const k = ctx.key(path);
+    lang.set(k, text);
+    return links.length > 0 ? { k, links } : { k };
+  };
 
   const compileListItems = (listNode: MdastNode, basePath: string): any[] => {
     const items = [];
     for (const [i, itemNode] of listNode.children.entries()) {
       const itemPath = `${basePath}.i${i}`;
-      const collectedRuns = [];
+      // The item's paragraphs are one string, a space apart, with each paragraph's link spans
+      // moved along by the text in front of it.
+      const collected: InlineText = { text: '', links: [] };
       let nested;
 
       for (const child of itemNode.children ?? []) {
         if (child.type === 'paragraph') {
-          collectedRuns.push(...inlineText(child.children).runs);
+          const { text, links } = inlineText(child.children);
+          const offset = collected.text === '' ? 0 : collected.text.length + 1;
+          collected.text = collected.text === '' ? text : `${collected.text} ${text}`;
+          for (const link of links) collected.links.push({ to: link.to, at: [link.at[0] + offset, link.at[1] + offset] });
         } else if (child.type === 'list') {
           nested = compileListItems(child, itemPath);
         } else {
@@ -164,7 +169,7 @@ export function compilePage(
         }
       }
 
-      const item: Record<string, any> = { runs: emitRuns(collectedRuns, itemPath) };
+      const item: Record<string, any> = emitInline(collected, itemPath);
       if (nested && nested.length > 0) item.items = nested;
       items.push(item);
     }
@@ -183,7 +188,7 @@ export function compilePage(
           const k = ctx.key(blockPath());
           // Headings render as one label — links inside a heading collapse to plain
           // styled text (no inline pressable heading runs; a v1 limitation).
-          const text = inlineText(node.children).runs.map(r => r.text).join('');
+          const { text } = inlineText(node.children);
           lang.set(k, text);
           blocks.push({ t: 'h', l: Math.min(node.depth, 3), k });
           break;
@@ -203,8 +208,7 @@ export function compilePage(
             break;
           }
           const path = blockPath();
-          const { runs } = inlineText(node.children);
-          blocks.push({ t: 'p', runs: emitRuns(runs, path) });
+          blocks.push({ t: 'p', ...emitInline(inlineText(node.children), path) });
           break;
         }
         case 'list': {
@@ -242,7 +246,7 @@ export function compilePage(
           const block: Record<string, any> = { t: 'adm', kind };
           if (bodyChildren[0]?.data?.directiveLabel) {
             const titleK = ctx.key(`${path}.t`);
-            const titleText = inlineText(bodyChildren[0].children).runs.map(r => r.text).join('');
+            const titleText = inlineText(bodyChildren[0].children).text;
             lang.set(titleK, `${ADMONITION_COLORS[kind as keyof typeof ADMONITION_COLORS]}§l${titleText}`);
             block.titleK = titleK;
             bodyChildren = bodyChildren.slice(1);
@@ -298,7 +302,7 @@ export function compilePage(
   const children = root.children;
   let title = typeof ctx.frontmatter.title === 'string' ? ctx.frontmatter.title : undefined;
   if (children[0]?.type === 'heading' && children[0].depth === 1) {
-    title ??= inlineText(children[0].children).runs.map(r => r.text).join('');
+    title ??= inlineText(children[0].children).text;
   }
   title ??= ctx.fallbackTitle ?? '';
 

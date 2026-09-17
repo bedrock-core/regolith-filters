@@ -23,65 +23,69 @@ function inline(
 
 describe('compileInline', () => {
   it('compiles plain text unchanged', () => {
-    expect(inline('Hello world.').runs).toEqual([{ text: 'Hello world.' }]);
+    expect(inline('Hello world.').text).toBe('Hello world.');
   });
 
   it('bakes bold and italic with reset-restore across nesting', () => {
-    expect(inline('**bold *italic* bold**').runs).toEqual([{ text: '§lbold §oitalic§r§l bold§r' }]);
+    expect(inline('**bold *italic* bold**').text).toBe('§lbold §oitalic§r§l bold§r');
   });
 
   it('styles inline code with §7', () => {
-    expect(inline('run `yarn build` now').runs).toEqual([{ text: 'run §7yarn build§r now' }]);
+    expect(inline('run `yarn build` now').text).toBe('run §7yarn build§r now');
   });
 
   it('restores outer styles after a nested pop', () => {
-    expect(inline('**a `code` b**').runs).toEqual([{ text: '§la §7code§r§l b§r' }]);
+    expect(inline('**a `code` b**').text).toBe('§la §7code§r§l b§r');
   });
 
   it('escapes .lang placeholder sequences with a zero-width reset-restore', () => {
-    expect(inline('done 100%s of %1 times').runs).toEqual([{ text: 'done 100%§rs of %§r1 times' }]);
+    expect(inline('done 100%s of %1 times').text).toBe('done 100%§rs of %§r1 times');
   });
 
   it('keeps active styles across an escaped placeholder', () => {
-    expect(inline('**50%s off**').runs).toEqual([{ text: '§l50%§r§ls off§r' }]);
+    expect(inline('**50%s off**').text).toBe('§l50%§r§ls off§r');
   });
 
   it('flattens soft line breaks to a single space', () => {
-    expect(inline('one\ntwo').runs).toEqual([{ text: 'one two' }]);
+    expect(inline('one\ntwo').text).toBe('one two');
   });
 
-  it('styles external links §9 as plain text — nothing can open a browser from a server form', () => {
-    const { runs } = inline('see [the docs](https://example.com)');
-    expect(runs).toEqual([{ text: 'see §9the docs§r' }]);
+  it('styles external links §3 as plain text — nothing can open a browser from a server form', () => {
+    const { text, links } = inline('see [the docs](https://example.com)');
+    expect(text).toBe('see §3the docs§r');
+    expect(links).toEqual([]);
   });
 
-  it('splits internal links into their own run, styled §9', () => {
+  it('keeps an internal link in the paragraph, styled §9, with the span its label covers', () => {
     const pageIds = new Set(['getting-started/installation']);
-    const { runs, report } = inline('see [**Install** guide](./installation.mdx)', {
+    const { text, links, report } = inline('see [**Install** guide](./installation.mdx)', {
       pageIds,
       fromDir: 'getting-started',
     });
-    expect(runs).toEqual([
-      { text: 'see ' },
-      { text: '§9§lInstall§r§9 guide', to: 'getting-started/installation' },
-    ]);
+    expect(text).toBe('see §9§lInstall§r§9 guide§r');
+    expect(links).toEqual([{ to: 'getting-started/installation', at: [6, 25] }]);
+    expect(text.slice(6, 25)).toBe('§lInstall§r§9 guide');
     expect(report.errors).toEqual([]);
   });
 
+  it('breaks anything a <Trans> would read as a tag, keeping the styles around it', () => {
+    const { text } = inline('use `<Text>` here');
+    expect(text).toBe('use §7<§r§7Text>§r here');
+  });
+
   it('reports broken internal links as errors and renders them as plain styled text', () => {
-    const { runs, report } = inline('see [missing](./nope.md)');
+    const { text, links, report } = inline('see [missing](./nope.md)');
     expect(report.errors).toHaveLength(1);
     expect(report.errors[0]).toContain('./nope.md');
-    expect(runs).toEqual([{ text: 'see §9missing§r' }]);
+    expect(text).toBe('see §3missing§r');
+    expect(links).toEqual([]);
   });
 
   it('resolves reference-style links through definitions', () => {
     const source = 'see [install][ref]\n\n[ref]: /setup\n';
-    const { runs } = inline(source, { pageIds: new Set(['setup']) });
-    expect(runs).toEqual([
-      { text: 'see ' },
-      { text: '§9install', to: 'setup' },
-    ]);
+    const { text, links } = inline(source, { pageIds: new Set(['setup']) });
+    expect(text).toBe('see §9install§r');
+    expect(links).toEqual([{ to: 'setup', at: [6, 13] }]);
   });
 });
 

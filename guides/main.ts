@@ -20,10 +20,11 @@ import picomatch from 'picomatch';
 import { buildLocale, buildManifest, type Report } from './lib/build.ts';
 import { upsertGeneratedSection } from './lib/lang.ts';
 import { keyPrefix, sanitizeSegment } from './lib/keys.ts';
+import { inlineLinkedText, linksByKey } from './lib/linked.ts';
 import { scanNamespace } from './lib/namespace.ts';
 import { reconcileLocale, summarizeKeysByPage } from './lib/locales.ts';
 import { readPngSize } from './lib/png.ts';
-import { guideScreenModules, guideScreenName } from './lib/screens.ts';
+import { guideScreenModules, guideScreenTables } from './lib/screens.ts';
 
 // ─── Environment ──────────────────────────────────────────────────────────────
 
@@ -299,6 +300,7 @@ function main(): void {
 
   // ── Other locales: values only, keys paired structurally ─────────────────
   const localeLang = new Map([[settings.defaultLocale, defaultBuild.lang]]);
+  const localeLinks = new Map([[settings.defaultLocale, linksByKey(defaultBuild.pages)]]);
   let drift = false;
 
   for (const locale of locales) {
@@ -325,6 +327,7 @@ function main(): void {
       report.warn('parity', `${extra.length} keys have no ${settings.defaultLocale} counterpart (structure drift?) and were dropped: ${summarizeKeysByPage(extra, prefix).join(', ')}`);
     }
     localeLang.set(locale, filled);
+    localeLinks.set(locale, linksByKey(build.pages));
     console.log(`ℹ️  [${locale}] ${build.pages.size} pages translated`);
   }
 
@@ -337,13 +340,30 @@ function main(): void {
     process.exit(1);
   }
 
-  // Each page's compiled screen name, so a link inside a guide reaches the
-  // module this filter names rather than re-deriving the fold at runtime.
+  // Which screens to compile: every page for everyone, or — when anything is
+  // gated — the pages a player may open, and every page again for operators.
+  const screenInput = {
+    pageIds: Object.keys(manifest.pages),
+    gated: manifest.gated === true,
+    gatedPageIds: Object.keys(manifest.pages).filter((pageId: string) => manifest.pages[pageId].a !== undefined),
+  };
+
+  // Each page's compiled screen name in each set, so a link inside a guide
+  // reaches the module this filter names rather than re-deriving the fold at
+  // runtime.
   if (settings.compileScreens) {
-    manifest.screens = Object.fromEntries(
-      Object.keys(manifest.pages).map((pageId: string) => [pageId, guideScreenName(pageId)]),
-    );
+    const { screens, opScreens } = guideScreenTables(screenInput);
+
+    manifest.screens = screens;
+    if (opScreens !== undefined) manifest.opScreens = opScreens;
   }
+
+  // A paragraph with links is broken into lines per language by the ui-compiler,
+  // which draws it through keys of its own: it travels as its text in every
+  // language, and its own key is never shipped.
+  const linked = inlineLinkedText(manifest.pages, localeLang, localeLinks, settings.defaultLocale);
+
+  if (linked > 0) console.log(`ℹ️  ${linked} paragraph(s) with links carried in every language`);
 
   // ── Write outputs ─────────────────────────────────────────────────────────
   const manifestPath = path.join(cwd, settings.manifestPath);
@@ -354,11 +374,12 @@ function main(): void {
   for (const [locale, entries] of localeLang) writeLangSection(locale, entries);
   updateLanguagesJson(locales);
 
-  // One screen module per page plus the home index, for the ui-compiler filter
-  // to bake and the bundler to ship — a guide page is a screen of its own.
+  // One screen module per page plus the entry and the index, for the
+  // ui-compiler filter to bake and the bundler to ship — a guide page is a
+  // screen of its own.
   if (settings.compileScreens) {
     const modules = guideScreenModules({
-      pageIds: Object.keys(manifest.pages),
+      ...screenInput,
       screensDir: settings.screensDir,
       manifestPath: settings.manifestPath,
       title: settings.screenTitle,
@@ -372,7 +393,7 @@ function main(): void {
       fs.writeFileSync(file, module.source, 'utf-8');
     }
 
-    console.log(`✅ ${settings.screensDir}/ — ${modules.length} screen modules (home + ${modules.length - 1} pages)`);
+    console.log(`✅ ${settings.screensDir}/ — ${modules.length} screen modules${screenInput.gated ? ', a second set for operators among them' : ''}`);
   }
 
   if (warningCount > 0) console.log(`⚠️  finished with ${warningCount} warning(s)`);

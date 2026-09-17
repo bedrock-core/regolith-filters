@@ -1,4 +1,4 @@
-// Inline (phrasing) content → an array of runs with Minecraft § style codes.
+// Inline (phrasing) content → one string with Minecraft § style codes, and where its links sit.
 //
 // Bedrock has no closing codes: §r clears EVERYTHING (color + bold + italic).
 // So this is a state machine over a style stack — leaving a styled span emits
@@ -6,11 +6,10 @@
 // zero-width in the ui-runtime text metrics, so none of this affects layout.
 //
 // Mapping: strong → §l, emphasis → §o, inlineCode → §7, delete (GFM) → §8,
-// link → §9. Output is split into RUNS at internal-link boundaries (not a
-// single collapsed string) so the caller can render an internal link as its
-// own inline pressable element instead of decorative text plus a detached
-// button row — external links stay plain text runs (nothing can open a
-// browser from a server form).
+// link → §9, and a link nothing can open (the web, an anchor) → §3. A paragraph
+// is ONE string per language, and each internal link is the span of it the link
+// covers: the ui-compiler breaks the paragraph into lines per language and makes
+// those spans pressable where they are drawn.
 
 import { toString as mdastToString } from 'mdast-util-to-string';
 
@@ -18,10 +17,16 @@ import { toString as mdastToString } from 'mdast-util-to-string';
 // to be re-pinned on every remark upgrade, so nodes stay open here.
 type MdastNode = any;
 
-/** One inline run: plain (styled) text, or an internal link the renderer makes pressable. */
-export interface InlineRun {
+/** An internal link, as the span `[start, end)` of the paragraph's text its label covers. */
+export interface InlineLink {
+  to: string;
+  at: [number, number];
+}
+
+/** A paragraph's inline content: one §-styled string, and the spans its internal links cover. */
+export interface InlineText {
   text: string;
-  to?: string;
+  links: InlineLink[];
 }
 
 export interface InlineContext {
@@ -37,6 +42,8 @@ const STYLE = {
   inlineCode: '§7',
   delete: '§8',
   link: '§9',
+  /** A link nothing can open — the web, or an anchor on the same page: a dimmer blue than one that works. */
+  unopenable: '§3',
 };
 
 /** true when the url points outside the guide (http, https, mailto, ...). */
@@ -78,34 +85,30 @@ export function resolveInternalLink(url: string, fromDir: string, pageIds: Set<s
   return pageIds.has(pageId) ? pageId : null;
 }
 
-/**
- * Compile mdast phrasing content to an array of §-styled runs, split at
- * internal-link boundaries.
- *
- * `runs` is the paragraph in document order; a run with `to` is an internal
- * link rendered as its own pressable element, everything else is plain
- * (styled) text. Adjacent plain runs are pre-merged.
- */
-export function compileInline(nodes: MdastNode[], ctx: InlineContext): { runs: InlineRun[] } {
-  const runs: InlineRun[] = [];
+/** Whether a stretch of styled text draws anything: § codes are zero-width. */
+const visible = (text: string): boolean => text.replace(/§./g, '') !== '';
 
-  // One §-styled sub-walk over a style stack, isolated to its own buffer —
-  // used both for the top-level walk and for a link's label (whose styling
-  // must not leak `restore()` codes from the surrounding paragraph's stack).
-  // `initialStyles` seeds already-active codes (e.g. a link label's own §9)
-  // so nested strong/emphasis restores re-emit them correctly.
-  const walk = (children: MdastNode[], initialStyles: string[] = []): string => {
-    const styles: string[] = [...initialStyles];
-    let out = initialStyles.join('');
+/**
+ * Compile mdast phrasing content to one §-styled string, and the span of it
+ * each internal link covers.
+ */
+export function compileInline(nodes: MdastNode[], ctx: InlineContext): InlineText {
+  const links: InlineLink[] = [];
+
+  // One §-styled walk over a style stack.
+  const walk = (children: MdastNode[]): string => {
+    const styles: string[] = [];
+    let out = '';
 
     const restore = () => '§r' + styles.join('');
 
-    // Escape .lang placeholder sequences (%1..%9, %s) so they render literally:
-    // a zero-width reset+restore between '%' and the trigger char breaks the
-    // sequence without affecting active styles or metrics.
+    // Escape .lang placeholder sequences (%1..%9, %s), and anything a <Trans>
+    // would read as a tag, so they render literally: a zero-width reset+restore
+    // after the '%' or the '<' breaks the sequence without affecting active
+    // styles or metrics.
     const emitText = (raw: string): void => {
       const flat = raw.replace(/\s*\r?\n\s*/g, ' ');
-      out += flat.replace(/%(?=[0-9s])/g, () => '%' + restore());
+      out += flat.replace(/%(?=[0-9s])|<(?=\/?[A-Za-z0-9_])/g, found => found + restore());
     };
 
     const push = (code: string): void => {
@@ -120,7 +123,7 @@ export function compileInline(nodes: MdastNode[], ctx: InlineContext): { runs: I
 
     const emitLink = (url: string, linkChildren: MdastNode[]): void => {
       const asPlainStyledText = () => {
-        push(STYLE.link);
+        push(STYLE.unopenable);
         visitAll(linkChildren);
         pop();
       };
@@ -137,17 +140,15 @@ export function compileInline(nodes: MdastNode[], ctx: InlineContext): { runs: I
         return;
       }
 
-      // Split the paragraph here: flush prose so far as its own run, then
-      // the link becomes its own run (own §-styled sub-walk, so nested
-      // strong/emphasis/inlineCode inside the label still work) so the
-      // caller can render it as an inline pressable element, not decorative
-      // text plus a detached button.
-      if (out !== '') { runs.push({ text: out }); out = ''; }
-      const styledLabel = walk(linkChildren, [STYLE.link]);
-      const label = styledLabel !== STYLE.link
-        ? styledLabel
-        : `${STYLE.link}${mdastToString({ type: 'root', children: linkChildren }).trim() || pageId}`;
-      runs.push({ text: label, to: pageId });
+      // The label stays in the paragraph's string, in the link colour, and its
+      // span is what gets pressed. A label that draws nothing reads as the page
+      // it opens.
+      push(STYLE.link);
+      const start = out.length;
+      visitAll(linkChildren);
+      if (!visible(out.slice(start))) emitText(mdastToString({ type: 'root', children: linkChildren }).trim() || pageId);
+      links.push({ to: pageId, at: [start, out.length] });
+      pop();
     };
 
     const visit = (node: MdastNode): void => {
@@ -216,8 +217,5 @@ export function compileInline(nodes: MdastNode[], ctx: InlineContext): { runs: I
     return out;
   };
 
-  const finalText = walk(nodes);
-  if (finalText !== '') { runs.push({ text: finalText }); }
-
-  return { runs };
+  return { text: walk(nodes), links };
 }

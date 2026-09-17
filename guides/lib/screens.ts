@@ -8,6 +8,12 @@
 // and the default export the compile expects. Pages become screens by NAME:
 // `guide_<page id>` with every character outside [a-z0-9_] folded to `_`,
 // which is what both the JSON UI namespace and the file basename accept.
+//
+// A guide with anything gated compiles a second set, for operators, under
+// names of its own. The ordinary names are what every player is shown, with
+// the gated pages left out, so an entry that fails to tell an operator apart
+// shows less rather than more. Each set is whole: its entry, index and pages
+// link only to one another, so the choice is made once, as a reader enters.
 
 import path from 'node:path';
 
@@ -17,8 +23,18 @@ export interface GuideScreenModule {
   source: string;
 }
 
+/** Who a set of screens is built for: every player, or the operators of a gated guide. */
+export type GuideAudience = 'player' | 'op';
+
 export interface GuideScreensInput {
   pageIds: Iterable<string>;
+  /**
+   * Whether anything in the guide is gated — the manifest's `gated`. A gated guide compiles a
+   * second set of screens, for operators.
+   */
+  gated?: boolean;
+  /** The pages only an operator may open: the set every player reads compiles no screen for them. */
+  gatedPageIds?: Iterable<string>;
   /** Where the modules go, relative to the workspace root. */
   screensDir: string;
   /** Where the manifest was written, relative to the workspace root. */
@@ -32,18 +48,71 @@ export interface GuideScreensInput {
   components?: string;
 }
 
-/** Where a guide opens: its home page, or its index when it has none. No page may fold to it. */
-export const HOME_SCREEN = 'guide_home';
+/** Every screen name of one audience's set. */
+export interface GuideScreenNames {
+  /** Where a guide opens: its home page, or its index when it has none. No page may fold to it. */
+  home: string;
+  /** The entry with a back control: the screen a host that opened the guide shows in its place. */
+  homeBack: string;
+  /** The index every page's back and index button open. No page may fold to it. */
+  index: string;
+  /** `getting-started/intro` → `guide_getting_started_intro`. */
+  page: (pageId: string) => string;
+}
 
-/** The entry with a back control: the screen a host that opened the guide shows in its place. */
-export const HOME_BACK_SCREEN = 'guide_home_back';
+/**
+ * The operators' prefix is not `guide_` plus something: every ordinary name starts `guide_`, so
+ * no page id can fold into the operators' set, and a folder named `op/` stays an ordinary name.
+ */
+const PREFIX: Record<GuideAudience, string> = { player: 'guide_', op: 'guideop_' };
 
-/** The index every page's back and index button open. No page may fold to it. */
-export const INDEX_SCREEN = 'guide_index';
+/**
+ * The names one audience's screens compile under. `@bedrock-core/guides` derives the same names
+ * in its `names.ts`, and the two must agree exactly: the half that finds a guide in another
+ * addon's pack never meets the build that named it.
+ */
+export function guideScreenNames(audience: GuideAudience): GuideScreenNames {
+  const prefix = PREFIX[audience];
 
-/** `getting-started/intro` → `guide_getting_started_intro`. */
-export const guideScreenName = (pageId: string): string =>
-  `guide_${pageId.toLowerCase().replace(/[^a-z0-9_]/g, '_')}`;
+  return {
+    home: `${prefix}home`,
+    homeBack: `${prefix}home_back`,
+    index: `${prefix}index`,
+    page: (pageId: string): string => `${prefix}${pageId.toLowerCase().replace(/[^a-z0-9_]/g, '_')}`,
+  };
+}
+
+/** The sets a guide compiles, each with the pages it has a screen for, sorted. */
+function screenSets({ pageIds, gated, gatedPageIds }: Pick<GuideScreensInput, 'pageIds' | 'gated' | 'gatedPageIds'>): { audience: GuideAudience; pageIds: string[] }[] {
+  const all = [...pageIds].sort();
+
+  if (gated !== true) return [{ audience: 'player', pageIds: all }];
+
+  const operatorsOnly = new Set(gatedPageIds);
+
+  return [
+    { audience: 'player', pageIds: all.filter(pageId => !operatorsOnly.has(pageId)) },
+    { audience: 'op', pageIds: all },
+  ];
+}
+
+/**
+ * Each set's page screens by page id, as the manifest carries them: `screens` for the set every
+ * player reads, and `opScreens` for the operators' set when the guide is gated.
+ */
+export function guideScreenTables(input: Pick<GuideScreensInput, 'pageIds' | 'gated' | 'gatedPageIds'>): { screens: Record<string, string>; opScreens?: Record<string, string> } {
+  const tables: { screens: Record<string, string>; opScreens?: Record<string, string> } = { screens: {} };
+
+  for (const { audience, pageIds } of screenSets(input)) {
+    const { page } = guideScreenNames(audience);
+    const table = Object.fromEntries(pageIds.map(pageId => [pageId, page(pageId)]));
+
+    if (audience === 'op') tables.opScreens = table;
+    else tables.screens = table;
+  }
+
+  return tables;
+}
 
 const toPosix = (p: string): string => p.replaceAll('\\', '/');
 
@@ -57,52 +126,66 @@ const specifierFrom = (from: string, target: string): string => {
   return relative.startsWith('.') ? relative : `./${relative}`;
 };
 
-export function guideScreenModules({ pageIds, screensDir, manifestPath, title, components }: GuideScreensInput): GuideScreenModule[] {
+export function guideScreenModules(input: GuideScreensInput): GuideScreenModule[] {
+  const { screensDir, manifestPath, title, components } = input;
   const specifier = specifierFrom(screensDir, manifestPath);
   const registry = components === undefined ? undefined : specifierFrom(screensDir, components.replace(/\.tsx?$/, ''));
   const registryImport = registry === undefined ? '' : `import components from ${JSON.stringify(registry)};\n`;
-  const pageOptions = `{ title: ${JSON.stringify(title)}${registry === undefined ? '' : ', components'} }`;
-  const owners = new Map<string, string>([[HOME_SCREEN, '(the guide entry)'], [HOME_BACK_SCREEN, '(the guide entry with a back control)'], [INDEX_SCREEN, '(the guide index)']]);
-  const modules: GuideScreenModule[] = [{
-    file: toPosix(path.join(screensDir, `${HOME_SCREEN}.screen.tsx`)),
-    source: `${HEADER}import manifest from ${JSON.stringify(specifier)};\n`
-      + 'import { guideHomeScreen } from \'@bedrock-core/guides\';\n\n'
-      + `export default guideHomeScreen(manifest, { title: ${JSON.stringify(title)} });\n`,
-  }];
+  const owners = new Map<string, string>();
+  const modules: GuideScreenModule[] = [];
 
-  for (const pageId of [...pageIds].sort()) {
-    const name = guideScreenName(pageId);
+  /** Claims `name` for `owner`, refusing a name two screens fold to. */
+  const claim = (name: string, owner: string): void => {
     const taken = owners.get(name);
 
     if (taken !== undefined) {
-      throw new Error(`pages "${taken}" and "${pageId}" both compile to the screen "${name}"; rename one so they differ in [a-z0-9]`);
+      throw new Error(`pages "${taken}" and "${owner}" both compile to the screen "${name}"; rename one so they differ in [a-z0-9]`);
     }
 
-    owners.set(name, pageId);
-    modules.push({
-      file: toPosix(path.join(screensDir, `${name}.screen.tsx`)),
-      source: `${HEADER}import manifest from ${JSON.stringify(specifier)};\n`
-        + registryImport
-        + 'import { guidePageScreen } from \'@bedrock-core/guides\';\n\n'
-        + `export default guidePageScreen(manifest, ${JSON.stringify(pageId)}, ${pageOptions});\n`,
-    });
-  }
+    owners.set(name, owner);
+  };
 
-  // Last, after the pages: the entry again, with a back control that leaves
-  // the guide — a screen's shape is fixed, so the entry a host opens is a
-  // second screen rather than a state of the first — and the index the pages
-  // return to.
-  modules.push({
-    file: toPosix(path.join(screensDir, `${HOME_BACK_SCREEN}.screen.tsx`)),
+  const moduleFor = (name: string, factoryName: string, call: string, imports = ''): GuideScreenModule => ({
+    file: toPosix(path.join(screensDir, `${name}.screen.tsx`)),
     source: `${HEADER}import manifest from ${JSON.stringify(specifier)};\n`
-      + 'import { guideHomeScreen } from \'@bedrock-core/guides\';\n\n'
-      + `export default guideHomeScreen(manifest, { title: ${JSON.stringify(title)}, back: true });\n`,
-  }, {
-    file: toPosix(path.join(screensDir, `${INDEX_SCREEN}.screen.tsx`)),
-    source: `${HEADER}import manifest from ${JSON.stringify(specifier)};\n`
-      + 'import { guideIndexScreen } from \'@bedrock-core/guides\';\n\n'
-      + `export default guideIndexScreen(manifest, { title: ${JSON.stringify(title)} });\n`,
+      + imports
+      + `import { ${factoryName} } from '@bedrock-core/guides';\n\n`
+      + `export default ${call};\n`,
   });
+
+  for (const { audience, pageIds } of screenSets(input)) {
+    const names = guideScreenNames(audience);
+    const operators = audience === 'op';
+    // The set every player reads is built with no audience at all, so a guide with nothing gated
+    // compiles exactly the modules it would if access did not exist.
+    const audienceOption = operators ? ', audience: "op"' : '';
+    const entryOptions = `{ title: ${JSON.stringify(title)}${audienceOption} }`;
+    const backOptions = `{ title: ${JSON.stringify(title)}${audienceOption}, back: true }`;
+    const pageOptions = `{ title: ${JSON.stringify(title)}${audienceOption}${registry === undefined ? '' : ', components'} }`;
+    const whose = operators ? 'the operators\' ' : 'the ';
+
+    claim(names.home, `(${whose}guide entry)`);
+    claim(names.homeBack, `(${whose}guide entry with a back control)`);
+    claim(names.index, `(${whose}guide index)`);
+
+    modules.push(moduleFor(names.home, 'guideHomeScreen', `guideHomeScreen(manifest, ${entryOptions})`));
+
+    for (const pageId of pageIds) {
+      const name = names.page(pageId);
+
+      claim(name, pageId);
+      modules.push(moduleFor(name, 'guidePageScreen', `guidePageScreen(manifest, ${JSON.stringify(pageId)}, ${pageOptions})`, registryImport));
+    }
+
+    // Last, after the pages: the entry again, with a back control that leaves
+    // the guide — a screen's shape is fixed, so the entry a host opens is a
+    // second screen rather than a state of the first — and the index the pages
+    // return to.
+    modules.push(
+      moduleFor(names.homeBack, 'guideHomeScreen', `guideHomeScreen(manifest, ${backOptions})`),
+      moduleFor(names.index, 'guideIndexScreen', `guideIndexScreen(manifest, ${entryOptions})`),
+    );
+  }
 
   return modules;
 }

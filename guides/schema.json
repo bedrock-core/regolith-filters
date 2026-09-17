@@ -48,7 +48,7 @@
     "compileScreens": {
       "type": "boolean",
       "default": true,
-      "description": "Write one generated *.screen.tsx per page (plus the home index) under screensDir, for the ui-compiler filter to bake into the pack. Off, the guide renders only through createGuide at runtime."
+      "description": "Write one generated *.screen.tsx per page, plus the entry, the entry with a back control and the index, under screensDir, for the ui-compiler filter to bake into the pack. A guide with anything gated gets a second set for operators, under guideop_ names; the ordinary guide_ set leaves the gated pages out. Off, only the manifest and the .lang entries are written."
     },
     "screensDir": {
       "type": "string",

@@ -36,6 +36,7 @@ import type { Document } from './lib/hooks.ts';
 import { mergeHook, parseJsonc } from './lib/hooks.ts';
 import type { CompiledFormScreen, CompiledScreen, Hook, RoutedFormScreen, ScreenBundle } from './lib/load.ts';
 import { listScreenExports, loadScreen } from './lib/load.ts';
+import { type ComposedLang, mergeLang, readPackLocales, writeComposedLang } from './lib/lang.ts';
 import { registerUiDefs } from './lib/uiDefs.ts';
 
 const projectRoot = process.env['ROOT_DIR'];
@@ -190,6 +191,22 @@ const cacheDir = path.join(projectRoot, '.regolith', 'cache', 'ui-compiler');
 // screen's build so localized text is measured as its real string.
 const I18N_BUNDLE = 'data/i18n/i18n.generated.json';
 const i18nBundle = fs.existsSync(I18N_BUNDLE) ? path.resolve(I18N_BUNDLE) : undefined;
+
+// Every language the pack ships, as the filters before this one left them: a
+// screen composes text per language from these, and writes back what it did.
+const i18nDefault = i18nBundle === undefined
+  ? undefined
+  : (JSON.parse(fs.readFileSync(i18nBundle, 'utf-8')) as { defaultLocale?: unknown }).defaultLocale;
+const packLocales = readPackLocales(path.resolve(TEXTS_DIR), typeof i18nDefault === 'string' ? i18nDefault : 'en_US');
+const localesFile = packLocales === undefined ? undefined : path.join(cacheDir, 'locales.json');
+
+if (localesFile !== undefined) {
+  fs.mkdirSync(cacheDir, { recursive: true });
+  fs.writeFileSync(localesFile, JSON.stringify(packLocales), 'utf-8');
+}
+
+/** What the screens composed per language, written back once every screen is built. */
+const composedLang: ComposedLang = {};
 
 // The generated bundles a screen's module may import the way the addon's own
 // code does — `@bedrock-core/generated/*` — resolved to what THIS build wrote:
@@ -504,6 +521,7 @@ for (const { screenPath, name, exportName } of entries) {
     cacheDir,
     jsxImportSource: JSX_IMPORT_SOURCE,
     i18nBundle,
+    ...localesFile === undefined ? {} : { locales: localesFile },
     aliases: generatedAliases,
     ...exportName === undefined ? {} : { exportName },
   }).catch((error: unknown) => fail(rel(screenPath), error));
@@ -524,6 +542,7 @@ for (const { screenPath, name, exportName } of entries) {
   );
 
   facesNamespace = screen.facesNamespace;
+  mergeLang(composedLang, screen.lang);
 
   for (const [id, face] of Object.entries(screen.faces)) {
     const existing = faces[id];
@@ -581,6 +600,16 @@ fs.writeFileSync(
 );
 
 console.log(`   ↳ ${Object.keys(faces).length} shared face(s) → ${rel(facesFile)}`);
+
+// ─── Composed text ────────────────────────────────────────────────────────────
+
+// The strings the screens composed per language, under the keys they minted,
+// into the WORKSPACE's language files the filters before this one wrote.
+if (Object.keys(composedLang).length > 0) {
+  const keys = writeComposedLang(path.resolve(TEXTS_DIR), composedLang);
+
+  console.log(`   ↳ composed text → ${keys} key(s) per language, ${Object.keys(composedLang).length} language(s)`);
+}
 
 // ─── Character table ──────────────────────────────────────────────────────────
 

@@ -34,10 +34,10 @@ describe('block compilation', () => {
     expect(blocks).toEqual([
       { t: 'h', l: 1, k: 'bcg.test.page.b0' },
       { t: 'h', l: 2, k: 'bcg.test.page.b1' },
-      { t: 'p', runs: [{ k: 'bcg.test.page.b2.r0' }] },
+      { t: 'p', k: 'bcg.test.page.b2' },
       { t: 'h', l: 3, k: 'bcg.test.page.b3' },
     ]);
-    expect(lang.get('bcg.test.page.b2.r0')).toBe('Body text.');
+    expect(lang.get('bcg.test.page.b2')).toBe('Body text.');
   });
 
   it('prefers the frontmatter title for the header, and renders the body as authored', () => {
@@ -45,15 +45,15 @@ describe('block compilation', () => {
     expect(lang.get('bcg.test.page.title')).toBe('Custom');
     expect(blocks).toEqual([
       { t: 'h', l: 1, k: 'bcg.test.page.b0' },
-      { t: 'p', runs: [{ k: 'bcg.test.page.b1.r0' }] },
+      { t: 'p', k: 'bcg.test.page.b1' },
     ]);
-    expect(lang.get('bcg.test.page.b1.r0')).toBe('Body.');
+    expect(lang.get('bcg.test.page.b1')).toBe('Body.');
   });
 
   it('leaves a NON-leading h1 alone — only the page title is special', () => {
     const { blocks } = page('---\ntitle: Custom\n---\n\nIntro.\n\n# Later\n');
     expect(blocks).toEqual([
-      { t: 'p', runs: [{ k: 'bcg.test.page.b0.r0' }] },
+      { t: 'p', k: 'bcg.test.page.b0' },
       { t: 'h', l: 1, k: 'bcg.test.page.b1' },
     ]);
   });
@@ -63,39 +63,33 @@ describe('block compilation', () => {
     expect(lang.get('bcg.test.getting_started.first_screen.title')).toBe('First Screen');
   });
 
-  it('splits a paragraph into text/link runs in document order', () => {
+  it('keeps a paragraph one string, with the span its link covers', () => {
     const files = new Map([['other', '# Other\n']]);
     const { blocks, lang } = page('See [the other page](./other.md).\n', { files });
     expect(blocks[0]).toEqual({
       t: 'p',
-      runs: [
-        { k: 'bcg.test.page.b0.r0' },
-        { k: 'bcg.test.page.b0.r1', to: 'other' },
-        { k: 'bcg.test.page.b0.r2' },
-      ],
+      k: 'bcg.test.page.b0',
+      links: [{ to: 'other', at: [6, 20] }],
     });
-    expect(lang.get('bcg.test.page.b0.r0')).toBe('See ');
-    expect(lang.get('bcg.test.page.b0.r1')).toBe('§9the other page');
-    expect(lang.get('bcg.test.page.b0.r2')).toBe('.');
+    expect(lang.get('bcg.test.page.b0')).toBe('See §9the other page§r.');
   });
 
-  it('compiles nested lists with item and link runs', () => {
+  it('compiles nested lists, each item one string with its link spans', () => {
     const source = '- first\n- second [link](./page)\n  - nested\n';
     const { blocks, lang } = page(source);
     expect(blocks[0]).toEqual({
       t: 'ul',
       items: [
-        { runs: [{ k: 'bcg.test.page.b0.i0.r0' }] },
+        { k: 'bcg.test.page.b0.i0' },
         {
-          runs: [
-            { k: 'bcg.test.page.b0.i1.r0' },
-            { k: 'bcg.test.page.b0.i1.r1', to: 'page' },
-          ],
-          items: [{ runs: [{ k: 'bcg.test.page.b0.i1.i0.r0' }] }],
+          k: 'bcg.test.page.b0.i1',
+          links: [{ to: 'page', at: [9, 13] }],
+          items: [{ k: 'bcg.test.page.b0.i1.i0' }],
         },
       ],
     });
-    expect(lang.get('bcg.test.page.b0.i1.i0.r0')).toBe('nested');
+    expect(lang.get('bcg.test.page.b0.i1')).toBe('second §9link§r');
+    expect(lang.get('bcg.test.page.b0.i1.i0')).toBe('nested');
   });
 
   it('keeps ordered list start offsets', () => {
@@ -110,13 +104,13 @@ describe('block compilation', () => {
     expect(blocks[0]).toEqual({
       t: 'adm',
       kind: 'tip',
-      blocks: [{ t: 'p', runs: [{ k: 'bcg.test.page.b0.b0.r0' }] }],
+      blocks: [{ t: 'p', k: 'bcg.test.page.b0.b0' }],
     });
     expect(blocks[1]).toEqual({
       t: 'adm',
       kind: 'warning',
       titleK: 'bcg.test.page.b1.t',
-      blocks: [{ t: 'p', runs: [{ k: 'bcg.test.page.b1.b0.r0' }] }],
+      blocks: [{ t: 'p', k: 'bcg.test.page.b1.b0' }],
     });
     expect(lang.get('bcg.test.page.b1.t')).toBe('§6§lCareful');
   });
@@ -124,7 +118,7 @@ describe('block compilation', () => {
   it('maps caution to warning and blockquotes to note', () => {
     const { blocks } = page(':::caution\nx\n:::\n\n> quoted\n');
     expect(blocks[0].kind).toBe('warning');
-    expect(blocks[1]).toEqual({ t: 'adm', kind: 'note', blocks: [{ t: 'p', runs: [{ k: 'bcg.test.page.b1.b0.r0' }] }] });
+    expect(blocks[1]).toEqual({ t: 'adm', kind: 'note', blocks: [{ t: 'p', k: 'bcg.test.page.b1.b0' }] });
   });
 
   it('stores code blocks raw and un-localized', () => {
@@ -143,7 +137,7 @@ describe('block compilation', () => {
   it('compiles hr and skips tables with a warning', () => {
     const { blocks, report } = page('---\ntitle: t\n---\n\nabove\n\n***\n\n| a | b |\n| - | - |\n| 1 | 2 |\n');
     expect(blocks).toEqual([
-      { t: 'p', runs: [{ k: 'bcg.test.page.b0.r0' }] },
+      { t: 'p', k: 'bcg.test.page.b0' },
       { t: 'hr' },
     ]);
     expect(report.warnings.some((w: string) => w.includes('tables'))).toBe(true);

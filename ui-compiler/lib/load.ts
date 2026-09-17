@@ -67,6 +67,8 @@ export interface CompiledScreen {
   hasBackdrop: boolean;
   /** Whether any text is live, i.e. decoded through the character table. */
   hasText: boolean;
+  /** The strings the screen composed per language, by language and key. */
+  lang?: Record<string, Record<string, string>>;
 }
 
 /** What `compileFormScreen` hands back, for an action form or a modal alike. */
@@ -91,14 +93,17 @@ export interface CompiledFormScreen {
   snapshot: { shape: string; baked: readonly string[]; vis: readonly number[] };
   /**
    * Present when nothing about the screen can change: the value each entry is
-   * shown with and where each press leads. Such a screen ships as this row
-   * rather than as a component — there is nothing left for one to decide.
+   * shown with and where each press leads, with the params it opens its target
+   * with. Such a screen ships as this row rather than as a component — there is
+   * nothing left for one to decide.
    */
   table?: {
     values: readonly string[];
-    targets: readonly ({ to: string } | { back: true } | null)[];
+    targets: readonly ({ to: string; params?: Record<string, unknown>; replace?: true } | { back: true } | null)[];
   };
   hasBackdrop: boolean;
+  /** The strings the screen composed per language, by language and key. */
+  lang?: Record<string, Record<string, string>>;
 }
 
 /** One file the addon writes over a vanilla one, holding modifications only. */
@@ -148,7 +153,7 @@ export interface ScreenBundle {
  * @param name       the screen's name
  * @param namespace  the addon namespace the screen is emitted under
  */
-const entrySource = (screenPath: string, name: string, namespace: string, i18nBundle: string | undefined, exportName: string | undefined): string => `
+const entrySource = (screenPath: string, name: string, namespace: string, i18nBundle: string | undefined, locales: string | undefined, exportName: string | undefined): string => `
 ${i18nBundle === undefined ? '' : `
 // The addon's translations, registered as the build's default resolver the
 // way the addon's own createI18n() call registers them at runtime: a
@@ -158,6 +163,13 @@ import i18nBundle from ${JSON.stringify(i18nBundle)};
 import { createI18n } from '@bedrock-core/i18n';
 
 createI18n(i18nBundle);
+`}${locales === undefined ? '' : `
+// Every language the pack ships, for the text a screen composes per language:
+// a trail collapsed to its room, a paragraph broken into lines.
+import packLocales from ${JSON.stringify(locales)};
+import { setBuildLocales } from '@bedrock-core/ui-runtime/compile';
+
+setBuildLocales(packLocales);
 `}
 // Namespace import, not a named one: esbuild fails the build outright on a
 // named import a module does not export, and a missing default deserves the
@@ -223,6 +235,8 @@ export interface LoadScreenOptions {
   jsxImportSource: string;
   /** Absolute path of the addon's runtime i18n bundle, when the i18n filter wrote one. */
   i18nBundle?: string;
+  /** Absolute path of the pack's languages, as `readPackLocales` read them, when it ships any. */
+  locales?: string;
   /**
    * The key the screen sits under when `screenPath` is a library's screens
    * module (a bare specifier whose default export is a record of screens).
@@ -241,10 +255,10 @@ const resolveDirOf = (screenPath: string): string =>
   path.isAbsolute(screenPath) ? path.dirname(screenPath) : process.cwd();
 
 export async function loadScreen(
-  { screenPath, name, namespace, cacheDir, jsxImportSource, i18nBundle, exportName, aliases = {} }: LoadScreenOptions,
+  { screenPath, name, namespace, cacheDir, jsxImportSource, i18nBundle, locales, exportName, aliases = {} }: LoadScreenOptions,
 ): Promise<ScreenBundle> {
   return evaluateEntry<ScreenBundle>({
-    contents: entrySource(screenPath, name, namespace, i18nBundle, exportName),
+    contents: entrySource(screenPath, name, namespace, i18nBundle, locales, exportName),
     resolveDir: resolveDirOf(screenPath),
     sourcefile: `${path.basename(screenPath)}.${name}.entry.tsx`,
     loader: 'tsx',
