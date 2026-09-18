@@ -492,6 +492,9 @@ const forms = [];
 /** Screen name -> the source path it came from, for the generated registration module. */
 const formSources = new Map<string, string | { specifier: string; exportName: string }>();
 
+/** The same for a container screen whose buttons take looks: the runtime is handed their tables. */
+const chestSources = new Map<string, string | { specifier: string; exportName: string }>();
+
 /**
  * The looks every screen of the addon shares, by the name each look derives
  * from itself: two screens that draw the same button name the same face, so
@@ -558,6 +561,10 @@ for (const { screenPath, name, exportName } of entries) {
     const chest = screen as CompiledScreen;
 
     compiled.push(chest);
+
+    if (chest.looks.length > 0) {
+      chestSources.set(name, exportName === undefined ? screenPath : { specifier: screenPath, exportName });
+    }
 
     const { drawn, channels, size } = chest.allocation;
 
@@ -898,6 +905,21 @@ if (forms.length > 0) {
     };
   }).filter(entry => !entry.static);
 
+  // A container screen is served by the addon's own `createContainerScreen`,
+  // so it needs no registration to render — only its buttons' look tables,
+  // which say which of the faces the build drew each button is wearing.
+  const chestLooks = compiled.filter(screen => chestSources.has(screen.name)).map((screen, index) => {
+    const from = chestSources.get(screen.name);
+    const library = typeof from === 'object';
+
+    return {
+      alias: `Container${index}`,
+      source: library ? moduleSpecifier(from.specifier) : specifierFor(from ?? ''),
+      member: library ? from.exportName : undefined,
+      looks: screen.looks,
+    };
+  });
+
   fs.mkdirSync(generatedDir, { recursive: true });
   fs.writeFileSync(
     path.join(generatedDir, GENERATED_FILE),
@@ -915,9 +937,10 @@ if (forms.length > 0) {
       '//',
       `// encoding ${runtime.windows.encodingMax} (window ${runtime.windows.encodingMin}..${runtime.windows.encodingMax}), vocabulary ${runtime.windows.vocabularyMax} (window ${runtime.windows.vocabularyMin}..${runtime.windows.vocabularyMax})`,
       '',
-      "import { addonReference, registerCompiledScreen, registerStaticScreens, render, type AddonReference, type RenderOptions } from '@bedrock-core/ui';",
+      `import { addonReference, registerCompiledScreen, ${chestLooks.length > 0 ? 'registerContainerLooks, ' : ''}registerStaticScreens, render, type AddonReference, type RenderOptions } from '@bedrock-core/ui';`,
       'import type { Player } from \'@minecraft/server\';',
       ...registrations.map(entry => `import ${entry.alias} from '${entry.source}';`),
+      ...chestLooks.map(entry => `import ${entry.alias} from '${entry.source}';`),
       '',
       '/**',
       ' * The screens nothing about which can change: every string baked, every press a link.',
@@ -931,6 +954,8 @@ if (forms.length > 0) {
       ...registrations.map(entry =>
         `registerCompiledScreen(${entry.alias}${entry.member === undefined ? '' : `[${JSON.stringify(entry.member)}]`}, `
         + `{ key: ${JSON.stringify(entry.key)}, title: ${JSON.stringify(entry.title)}, snapshot: ${JSON.stringify(entry.snapshot)} });`),
+      ...chestLooks.map(entry =>
+        `registerContainerLooks(${entry.alias}${entry.member === undefined ? '' : `[${JSON.stringify(entry.member)}]`}, ${JSON.stringify(entry.looks)});`),
       '',
       '/** Every screen this addon compiled, by the key it is navigated with. */',
       `export const SCREEN_KEYS = ${JSON.stringify(forms.map(screen => screenKey(screen.name)), null, 2)} as const;`,
@@ -1109,7 +1134,7 @@ if (added > 0) {
 // PROPERTY holding the key. A block gets `minecraft:block_entity` with the
 // container sized the same way and its dynamic properties turned on — that is
 // where a block screen keeps its state — plus a block STATE of the same name
-// holding the key, declared with the one value a block's one screen can have.
+// holding the key as its default value.
 const entityFiles = findFiles(path.resolve(ENTITY_DIR), '.json');
 const blockFiles = findFiles(path.resolve(BLOCK_DIR), '.json');
 
@@ -1206,7 +1231,7 @@ for (const screen of compiled) {
       `❌ ui-compiler: ${screen.name} needs ${screen.allocation.size} container slots and a block holds ${blockSlotLimit}.`,
     );
     console.error(
-      '   Two go to the routing sentinel, one to each <Slot> and each Button, and the rest to the bank\n'
+      '   One goes to the routing sentinel, one to each <Slot> and each Button, and the rest to the bank\n'
       + '   behind them: one slot per character of every live <Text> maxLength, and one per live number\n'
       + '   or flag. Shorten the live text, drop cells, or host the screen on an entity.',
     );
@@ -1221,17 +1246,44 @@ for (const screen of compiled) {
   blockEntity.dynamic_properties = true;
 
   // The block carries its own layout key as a STATE, the way an entity carries
-  // it as a property. One value, because a block type opens one screen: the
-  // state exists to be read, not to vary. A string, not a number: the engine
-  // stores an integer state by its value in the block's state bits, and a
-  // layout key does not fit them, while a single string value costs none.
+  // it as a property. A string, not a number: the engine stores an integer
+  // state by its value in the block's state bits, and a layout key does not
+  // fit them. Two values although a block type opens one screen: a one-value
+  // state needs zero bits, which the engine logs as out of range. The key is
+  // first, so it is the default every placed block carries.
   const states = block.description.states ??= {};
 
-  states[layoutProperty] = [String(screen.layoutId)];
+  states[layoutProperty] = [String(screen.layoutId), 'none'];
 
   fs.writeFileSync(match, stringify(definition), 'utf-8');
 
   console.log(
     `   ↳ ${type}: slot_count ${screen.allocation.size}, ${layoutProperty} = ${screen.layoutId}`,
   );
+}
+
+// ─── Protocol items ───────────────────────────────────────────────────────────
+
+// Everything a compiled screen's runtime places in its container — the
+// sentinel, a button's transport, a guard, a bank cell — is an item the addon
+// registers, one per role, under the namespace of each entity or block a
+// screen opens from: that is where the runtime looks for them. The names are
+// hashed from the namespace and the role, so a rebuild writes the same items
+// and a world keeps the ones its hosts already hold.
+const ITEM_DIR = 'BP/items/core-ui';
+
+if (runtime.protocolItems !== undefined) {
+  const itemNamespaces = new Set(compiled.map(screen => screen.host.type.split(':')[0] ?? screen.host.type));
+
+  for (const itemNamespace of itemNamespaces) {
+    const dir = path.resolve(ITEM_DIR, itemNamespace);
+
+    fs.mkdirSync(dir, { recursive: true });
+
+    for (const item of runtime.protocolItems(itemNamespace)) {
+      fs.writeFileSync(path.join(dir, `${item.role}.json`), stringify(item.document), 'utf-8');
+    }
+
+    console.log(`   ↳ protocol items → ${rel(dir)}`);
+  }
 }

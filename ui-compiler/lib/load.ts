@@ -69,6 +69,8 @@ export interface CompiledScreen {
   hasText: boolean;
   /** The strings the screen composed per language, by language and key. */
   lang?: Record<string, Record<string, string>>;
+  /** The looks its buttons take, which the runtime is handed to say which one each wears. */
+  looks: readonly unknown[];
 }
 
 /** What `compileFormScreen` hands back, for an action form or a modal alike. */
@@ -141,6 +143,12 @@ export interface ScreenBundle {
   maxLayout: number;
   /** Slots a block container can hold, which is the whole of a block-hosted screen's allocation. */
   blockSlotLimit: number;
+  /**
+   * The items the runtime places in a compiled screen's container, as the
+   * addon registers them under one namespace. Absent from a library that
+   * places vanilla items instead.
+   */
+  protocolItems?: (namespace: string) => { role: string; identifier: string; document: Record<string, unknown> }[];
   /** The encoding and vocabulary windows of the library the screen was compiled against. */
   windows: { encodingMin: number; encodingMax: number; vocabularyMin: number; vocabularyMax: number };
 }
@@ -180,6 +188,9 @@ import {
   BLOCK_SLOT_LIMIT, buildScreenOnce, charsetLang, ENCODING_MAX, ENCODING_MIN, hostFor,
   LAYOUT_PROPERTY, MAX_LAYOUT, VOCABULARY_MAX, VOCABULARY_MIN,
 } from '@bedrock-core/ui-runtime/compile';
+// A namespace import for what an older library may not export: a named one
+// would fail the build rather than read as absent.
+import * as runtimeContract from '@bedrock-core/ui-runtime/compile';
 
 // A screen module default-exports its component; a library's screens module
 // default-exports a record of them, and one is picked by name.
@@ -213,6 +224,7 @@ export default {
   layoutProperty: LAYOUT_PROPERTY,
   maxLayout: MAX_LAYOUT,
   blockSlotLimit: BLOCK_SLOT_LIMIT,
+  protocolItems: runtimeContract.protocolItemDefinitions,
   windows: {
     encodingMin: ENCODING_MIN,
     encodingMax: ENCODING_MAX,
