@@ -1,0 +1,49 @@
+{
+	"$schema": "http://json-schema.org/draft-07/schema#",
+	"$id": "core-stack",
+	"title": "core filter settings",
+	"type": "object",
+	"additionalProperties": false,
+	"properties": {
+		"shared": {
+			"type": "object",
+			"description": "Settings merged into every stage. The addon's `namespace` belongs here, and so does `pretty`, which lays out every file the stack generates. A stage that does not read a key ignores it.",
+			"properties": {
+				"namespace": {
+					"type": "string",
+					"description": "The addon's namespace, `<creator>_<pack>`, when the stages should not read it off the `core.register()` call."
+				},
+				"pretty": {
+					"description": "How generated JSON is laid out. Absent or false writes it minified. An object lays it out: `indent` is \"tab\" or \"space\" (spaces when omitted), `size` the characters per level (2 for spaces, 1 for tabs when omitted).",
+					"oneOf": [
+						{ "const": false },
+						{
+							"type": "object",
+							"properties": {
+								"indent": { "enum": ["tab", "space"] },
+								"size": { "type": "integer", "minimum": 1 }
+							},
+							"additionalProperties": false
+						}
+					]
+				}
+			},
+			"default": {}
+		},
+		"manifest": { "$ref": "#/definitions/stage" },
+		"generator": {
+			"description": "The generator runs only when this key is present — it writes schema types into the project, so a project opts in. `true` runs it with its defaults.",
+			"oneOf": [{ "type": "object" }, { "type": "boolean" }]
+		},
+		"guides": { "$ref": "#/definitions/stage" },
+		"i18n": { "$ref": "#/definitions/stage" },
+		"ui-compiler": { "$ref": "#/definitions/stage" },
+		"bundler": { "$ref": "#/definitions/stage" }
+	},
+	"definitions": {
+		"stage": {
+			"description": "Settings for this stage, merged over `shared`. `false` skips the stage.",
+			"oneOf": [{ "type": "object" }, { "const": false }]
+		}
+	}
+}

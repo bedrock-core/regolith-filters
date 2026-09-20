@@ -1,0 +1,10 @@
+{
+	"description": "Compiles screens written in JSX into static JSON UI — a container screen onto the chest, a form screen onto the server form — and wires each to the runtime that serves it.",
+	"filters": [
+		{
+			"name": "Compile UI Screens",
+			"runWith": "nodejs",
+			"script": "./main.ts"
+		}
+	]
+}
