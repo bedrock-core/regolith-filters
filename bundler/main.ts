@@ -5,6 +5,26 @@ import json5 from "json5";
 import path from "path";
 import { pathToFileURL } from "url";
 
+/** Resolves shared toolkit imports from the addon so linked packages share one runtime. */
+const projectModulesPlugin = (from: string): Plugin => {
+  const resolved = Symbol('project-bedrock-modules');
+
+  return {
+    name: 'project-bedrock-modules',
+    setup(pluginBuild) {
+      pluginBuild.onResolve({ filter: /^@bedrock-core\// }, args => {
+        if (args.pluginData === resolved) return undefined;
+
+        return pluginBuild.resolve(args.path, {
+          kind: args.kind,
+          resolveDir: from,
+          pluginData: resolved,
+        });
+      });
+    },
+  };
+};
+
 type Desugar = (source: string, fileName: string) => string;
 
 /** Where the ui-compiler filter sits when Regolith installs it beside this one. */
@@ -362,7 +382,7 @@ async function main(): Promise<void> {
     }
 
     const tsconfigPaths = tsconfig.compilerOptions?.paths ?? {};
-    await build({ ...buildOptions, plugins: [tsconfigPathsPlugin(tsconfigPaths), json5Plugin(), jsxSugarPlugin] }).catch((err: unknown) => {
+    await build({ ...buildOptions, plugins: [tsconfigPathsPlugin(tsconfigPaths), projectModulesPlugin(path.dirname(tsconfigPath)), json5Plugin(), jsxSugarPlugin] }).catch((err: unknown) => {
       console.error("❌ Build error:", err instanceof Error ? err.message : err);
       process.exit(1);
     });

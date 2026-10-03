@@ -12,8 +12,22 @@ anything else fails the build naming the roots:
 | --- | --- | --- |
 | `<Container entity>` | a custom entity's container screen | the vanilla chest, through a hook and the addon's router |
 | `<Container block>` | a custom block's container screen | the vanilla data-driven container, through a second hook and the same router |
-| `<Screen>` | an action form | the library's mount, gated on the screen's title |
-| `<Form>` | a native modal form | the same mount, with the engine's own fields in place |
+| `<Screen>` | an action form | an addon-owned router on the vanilla form screen |
+| `<Form>` | a native modal form | the same router, with the engine's own fields in place |
+
+Addon forms attach through an addon-owned bridge in `ui/server_form.json`.
+The modification references a local typed control; cross-namespace router
+inheritance stays in the bridge's normal definition. Existing vanilla controls
+and other addons' hooks remain additive. A colliding bridge definition or
+conflicting vanilla property fails the build instead of replacing another control.
+
+The project's compiler links every screen's required helpers into
+`ui/core-ui/support/<namespace>.json`, using addon-owned definition names. These
+helpers come from TypeScript builders and include only dependencies the screens use.
+Forms and native containers need no JSON UI from the shared resource pack; textures
+and localization remain resource dependencies. Container builds include desktop and
+pocket shells that preserve vanilla fallback and the shared insertion panels for
+addon routers. Test metadata paths and hashes describe the linked output.
 
 
 ## Install

@@ -1,16 +1,16 @@
 // Writing a hook into a vanilla file that may already carry one.
 //
-// A hook is a copy of a vanilla UI file holding modifications only. The pack
-// being built may already ship its own copy of that file — the render pack
-// does, to point the chest screen at its chest root — and overwriting it
-// would throw that edit away. So a hook is MERGED: the file's existing
-// modifications of each panel come first, the addon's follow.
+// Hooks modify vanilla controls and can declare addon-owned bridge controls.
+// Existing modifications precede the addon's, preserving hooks already in the pack.
+
+import { isDeepStrictEqual } from 'node:util';
 
 /** One JSON UI document: a namespace, and definitions or modification entries. */
 export type Document = Record<string, unknown>;
 
 /** A definition carrying modifications, which is all a hook may add to. */
 interface Modifiable {
+  [property: string]: unknown;
   modifications?: unknown[];
 }
 
@@ -77,7 +77,7 @@ export const parseJsonc = (raw: string): Document => {
  * The hook document merged over what the file already holds.
  *
  * @param existing the file's current text, if there is one
- * @param hook the hook document: a namespace and modification entries
+ * @param hook the hook document: a namespace, modification entries and new addon-owned definitions
  * @returns the document to write
  * @throws when the file defines a panel the hook modifies: that definition would
  *   replace vanilla's, which is the one thing a hook must never do
@@ -88,6 +88,8 @@ export const mergeHook = (existing: string | undefined, hook: Document): Documen
   }
 
   const merged = parseJsonc(existing);
+
+  if (merged.namespace !== hook.namespace) throw new Error('The existing UI hook has a different namespace.');
 
   for (const [name, entry] of Object.entries(hook)) {
     if (name === 'namespace') {
@@ -102,16 +104,33 @@ export const mergeHook = (existing: string | undefined, hook: Document): Documen
       continue;
     }
 
-    if (!Array.isArray(current.modifications)) {
+    const incoming = entry as Modifiable;
+
+    if ('type' in incoming || 'controls' in incoming) {
+      throw new Error(`${String(hook.namespace)}.${name} is already defined; an addon-owned hook control cannot replace it`);
+    }
+
+    if ('type' in current || 'controls' in current) {
       throw new Error(
         `${String(hook.namespace)}.${name} is DEFINED in the pack's own copy of the file; `
         + 'a hook can only add modifications to it, and a definition there replaces vanilla\'s for every pack',
       );
     }
 
-    const added = (entry as Modifiable).modifications ?? [];
+    const properties = { ...current };
+    for (const [property, value] of Object.entries(incoming)) {
+      if (property === 'modifications') continue;
+      if (property in current && !isDeepStrictEqual(current[property], value)) {
+        throw new Error(`${String(hook.namespace)}.${name}.${property} conflicts with the compiler's vanilla hook`);
+      }
+      properties[property] = value;
+    }
 
-    merged[name] = { ...current, modifications: [...current.modifications, ...added] };
+    const modifications = [...current.modifications ?? []];
+    for (const modification of incoming.modifications ?? []) {
+      if (!modifications.some(value => isDeepStrictEqual(value, modification))) modifications.push(modification);
+    }
+    merged[name] = { ...properties, ...modifications.length === 0 ? {} : { modifications } };
   }
 
   return merged;

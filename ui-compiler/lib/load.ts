@@ -18,6 +18,26 @@ import { build, type Plugin } from 'esbuild';
 import { gameStubPlugin } from './stubs/game.ts';
 import { desugarJsxConditionals } from './sugar.ts';
 
+/** Resolves shared toolkit imports from the addon so linked packages share one runtime. */
+const projectModulesPlugin = (from: string): Plugin => {
+  const resolved = Symbol('project-bedrock-modules');
+
+  return {
+    name: 'project-bedrock-modules',
+    setup(pluginBuild) {
+      pluginBuild.onResolve({ filter: /^@bedrock-core\// }, args => {
+        if (args.pluginData === resolved) return undefined;
+
+        return pluginBuild.resolve(args.path, {
+          kind: args.kind,
+          resolveDir: from,
+          pluginData: resolved,
+        });
+      });
+    },
+  };
+};
+
 /** Rewrites React's conditional-rendering idioms in screen modules; see sugar.ts. */
 export const jsxSugarPlugin: Plugin = {
   name: 'jsx-conditional-sugar',
@@ -31,16 +51,6 @@ export const jsxSugarPlugin: Plugin = {
 
 import type { Document } from './hooks.ts';
 
-/** What the form router needs of a screen it gates: its name, its namespace, and whether a backdrop goes behind it. */
-export interface RoutedFormScreen {
-  name: string;
-  namespace: string;
-  hasBackdrop: boolean;
-  marker?: string;
-  /** With `marker`: the host's frame and the area's offset in it, which the mount places the screen by. */
-  embed?: EmbedPlacement;
-}
-
 /** How an embedded screen sits in its host's frame. */
 export interface EmbedPlacement {
   readonly frame: readonly [number, number];
@@ -50,6 +60,7 @@ export interface EmbedPlacement {
 /** What `compileScreen` hands back for a chest screen. */
 export interface CompiledScreen {
   testMetadata?: unknown;
+  addon: string;
   /** The screen's name, from its file name. */
   name: string;
   /** JSON UI namespace the layout was emitted into. */
@@ -110,7 +121,7 @@ export interface CompiledFormScreen {
   lang?: Record<string, Record<string, string>>;
 }
 
-/** One file the addon writes over a vanilla one, holding modifications only. */
+/** A vanilla-path hook with modifications and optional addon-owned bridge definitions. */
 export interface Hook {
   file: string;
   document: Document;
@@ -129,13 +140,11 @@ export interface ScreenBundle {
   /** Which screen the author's root asked for. */
   kind: 'chest' | 'form';
   compiled: CompiledScreen | CompiledFormScreen;
-  /** The addon's hooks into vanilla's chest files, its router, and the router's pack path. */
-  buildRouter: (screens: CompiledScreen[]) => { hooks: Hook[]; router: Document; routerFile: string };
-  /** The addon's hook into the compiled-form mount, and its router. */
-  formRouter: (screens: RoutedFormScreen[], addon: string) => {
-    hook: Hook;
-    router: Document;
-    routerFile: string;
+  /** Links every host and emits the union of their compiler-owned helpers. */
+  buildUiPack: (screens: (CompiledScreen | CompiledFormScreen)[], addon: string) => {
+    screens: (CompiledScreen | CompiledFormScreen)[];
+    hooks: Hook[];
+    documents: Hook[];
   };
   /** The `.lang` lines live text decodes through. */
   lang: string[];
@@ -185,7 +194,7 @@ setBuildLocales(packLocales);
 // named import a module does not export, and a missing default deserves the
 // message below instead.
 import * as screenModule from ${JSON.stringify(screenPath)};
-import { buildRouter, compileFormScreen, compileScreen, formRouter } from '@bedrock-core/ui-compiler';
+import { compileFormScreen, compileScreen, buildUiPack } from '@bedrock-core/ui-compiler';
 import {
   BLOCK_SLOT_LIMIT, buildScreenOnce, charsetLang, ENCODING_MAX, ENCODING_MIN, hostFor,
   LAYOUT_PROPERTY, MAX_LAYOUT, VOCABULARY_MAX, VOCABULARY_MIN,
@@ -220,8 +229,7 @@ export default {
   compiled: kind === 'chest'
     ? compileScreen(Screen, { name: ${JSON.stringify(name)}, namespace: ${JSON.stringify(namespace)}, testMetadata: ${testMetadata} })
     : compileFormScreen(Screen, { name: ${JSON.stringify(name)}, namespace: ${JSON.stringify(namespace)}, testMetadata: ${testMetadata} }),
-  buildRouter,
-  formRouter,
+  buildUiPack,
   lang: charsetLang(),
   layoutProperty: LAYOUT_PROPERTY,
   maxLayout: MAX_LAYOUT,
@@ -347,7 +355,7 @@ export async function evaluateEntry<T>(
     // The same desugaring the bundler applies to the shipped scripts, so the
     // shape a compile bakes and the tree the runtime walks agree.
     // The game modules are stubbed rather than resolved; see stubs/game.ts.
-    plugins: [jsxSugarPlugin, gameStubPlugin(resolveDir)],
+    plugins: [projectModulesPlugin(process.env['ROOT_DIR'] ?? resolveDir), jsxSugarPlugin, gameStubPlugin(resolveDir)],
     write: false,
     logLevel: 'silent',
   });
