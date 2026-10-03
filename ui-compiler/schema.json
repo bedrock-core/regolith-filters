@@ -4,6 +4,11 @@
 	"type": "object",
 	"additionalProperties": false,
 	"properties": {
+		"testMetadata": {
+			"type": "boolean",
+			"default": false,
+			"description": "Write development-only semantic control metadata and exact UI file hashes to RP/bedrock-core/test-metadata.json. Does not instrument or modify rendered controls."
+		},
 		"namespace": {
 			"type": "string",
 			"pattern": "^[a-z0-9_]+$",

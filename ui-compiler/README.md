@@ -54,6 +54,19 @@ evaluates it once, on the build machine, with `@minecraft/server` and `@minecraf
 stubbed out. Hooks are fine; module-scope code that reaches for the game is not. Keep that in the
 module that serves the screen — a screen's handlers and effects only ever run in game.
 
+## Test metadata
+
+Set `testMetadata: true` in this filter's settings to write
+`RP/bedrock-core/test-metadata.json`. With `core`, use
+`settings["ui-compiler"].testMetadata`. The default is `false`.
+
+The version 1 manifest contains screen and control identities, semantic roles
+and names, property paths to emitted control instances, and SHA-256 hashes of
+the exact UI files. It does not instrument controls or change form responses.
+The schema and TypeScript types are available through
+`@bedrock-core/ui-compiler/testing` and `@bedrock-core/ui-compiler/testing/schema`.
+The manifest is rebuilt deterministically when enabled and removed when disabled.
+
 ## Documentation
 
 https://bedrock-core.drav.dev/docs/filters/ui-compiler

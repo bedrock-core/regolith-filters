@@ -49,6 +49,7 @@ export interface EmbedPlacement {
 
 /** What `compileScreen` hands back for a chest screen. */
 export interface CompiledScreen {
+  testMetadata?: unknown;
   /** The screen's name, from its file name. */
   name: string;
   /** JSON UI namespace the layout was emitted into. */
@@ -75,6 +76,7 @@ export interface CompiledScreen {
 
 /** What `compileFormScreen` hands back, for an action form or a modal alike. */
 export interface CompiledFormScreen {
+  testMetadata?: unknown;
   name: string;
   addon: string;
   /** JSON UI namespace the layout was emitted into. */
@@ -161,7 +163,7 @@ export interface ScreenBundle {
  * @param name       the screen's name
  * @param namespace  the addon namespace the screen is emitted under
  */
-const entrySource = (screenPath: string, name: string, namespace: string, i18nBundle: string | undefined, locales: string | undefined, exportName: string | undefined): string => `
+const entrySource = (screenPath: string, name: string, namespace: string, i18nBundle: string | undefined, locales: string | undefined, exportName: string | undefined, testMetadata: boolean): string => `
 ${i18nBundle === undefined ? '' : `
 // The addon's translations, registered as the build's default resolver the
 // way the addon's own createI18n() call registers them at runtime: a
@@ -216,8 +218,8 @@ const kind = hostFor(buildScreenOnce(Screen)).id === 'chest' ? 'chest' : 'form';
 export default {
   kind,
   compiled: kind === 'chest'
-    ? compileScreen(Screen, { name: ${JSON.stringify(name)}, namespace: ${JSON.stringify(namespace)} })
-    : compileFormScreen(Screen, { name: ${JSON.stringify(name)}, namespace: ${JSON.stringify(namespace)} }),
+    ? compileScreen(Screen, { name: ${JSON.stringify(name)}, namespace: ${JSON.stringify(namespace)}, testMetadata: ${testMetadata} })
+    : compileFormScreen(Screen, { name: ${JSON.stringify(name)}, namespace: ${JSON.stringify(namespace)}, testMetadata: ${testMetadata} }),
   buildRouter,
   formRouter,
   lang: charsetLang(),
@@ -235,6 +237,7 @@ export default {
 `;
 
 export interface LoadScreenOptions {
+  testMetadata?: boolean;
   /** Absolute path of the screen module. */
   screenPath: string;
   /** The screen's name. */
@@ -267,10 +270,10 @@ const resolveDirOf = (screenPath: string): string =>
   path.isAbsolute(screenPath) ? path.dirname(screenPath) : process.cwd();
 
 export async function loadScreen(
-  { screenPath, name, namespace, cacheDir, jsxImportSource, i18nBundle, locales, exportName, aliases = {} }: LoadScreenOptions,
+  { screenPath, name, namespace, cacheDir, jsxImportSource, i18nBundle, locales, exportName, aliases = {}, testMetadata = false }: LoadScreenOptions,
 ): Promise<ScreenBundle> {
   return evaluateEntry<ScreenBundle>({
-    contents: entrySource(screenPath, name, namespace, i18nBundle, locales, exportName),
+    contents: entrySource(screenPath, name, namespace, i18nBundle, locales, exportName, testMetadata),
     resolveDir: resolveDirOf(screenPath),
     sourcefile: `${path.basename(screenPath)}.${name}.entry.tsx`,
     loader: 'tsx',
