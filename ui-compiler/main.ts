@@ -34,8 +34,9 @@ import path from 'node:path';
 import { readDeclaration, type DeclaredApp, type ManifestFields } from './lib/declaration.ts';
 import type { Document } from './lib/hooks.ts';
 import { mergeHook, parseJsonc } from './lib/hooks.ts';
-import type { CompiledFormScreen, CompiledScreen } from './lib/load.ts';
+import type { CompiledFormScreen, CompiledScreen, LoadScreenOptions } from './lib/load.ts';
 import { listScreenExports, loadScreen } from './lib/load.ts';
+import { ScreenDataLoader } from './lib/screen-loader.ts';
 import { writeTestMetadata, type TestMetadataScreen } from './lib/test-metadata.ts';
 import { type ComposedLang, mergeLang, readPackLocales, writeComposedLang } from './lib/lang.ts';
 import { registerUiDefs } from './lib/uiDefs.ts';
@@ -494,10 +495,9 @@ const chestSources = new Map<string, string | { specifier: string; exportName: s
 const faces: Record<string, unknown> = {};
 let facesNamespace: string | undefined;
 
-// Every bundle carries the project's own library, and its exports are the same
-// from one screen to the next; the last one loaded speaks for all of them.
-/** @type {import('./lib/load.js').ScreenBundle} */
-let library;
+// One library bundle supplies the pack-linking methods after the data-only screen pass.
+let libraryOptions: LoadScreenOptions | undefined;
+const screenLoader = new ScreenDataLoader();
 const testScreens: TestMetadataScreen[] = [];
 
 for (const { screenPath, name, exportName } of entries) {
@@ -509,7 +509,7 @@ for (const { screenPath, name, exportName } of entries) {
   // and it will not follow a `never`-returning call in the catch to rule that
   // out. Catching on the promise keeps `fail`'s `never` in the type, so there
   // is no `undefined` to assert away.
-  const bundle = await loadScreen({
+  const options: LoadScreenOptions = {
     testMetadata: settings.testMetadata === true,
     screenPath,
     name,
@@ -520,9 +520,10 @@ for (const { screenPath, name, exportName } of entries) {
     ...localesFile === undefined ? {} : { locales: localesFile },
     aliases: generatedAliases,
     ...exportName === undefined ? {} : { exportName },
-  }).catch((error: unknown) => fail(rel(screenPath), error));
+  };
+  const bundle = await screenLoader.load(options).catch((error: unknown) => fail(rel(screenPath), error));
 
-  library = bundle;
+  libraryOptions = options;
 
   const screen = bundle.compiled;
 
@@ -557,13 +558,15 @@ for (const { screenPath, name, exportName } of entries) {
   }
 }
 
-if (library === undefined) {
+await screenLoader.close();
+
+if (libraryOptions === undefined) {
   throw new Error('unreachable: every screen either loads a bundle or stops the build');
 }
 
 // Captured as a const: narrowing a `let` does not survive into a later loop
 // body, and re-asserting it at each use is worse than naming it once.
-const runtime = library;
+const runtime = await loadScreen(libraryOptions);
 
 // Link only after every screen is known, so helpers are emitted once per addon.
 const uiPack = (() => {
@@ -822,7 +825,7 @@ if (forms.length > 0) {
       ' * Every static screen of this addon as another realm can show it: the title,',
       ' * the entry values and where each press leads. The realm announces it at',
       ' * startup; announce it directly with `screens(core).provide(uiReference())`',
-      " * from '@bedrock-core/navigation' — and any realm draws this addon's screens",
+      " * from '@bedrock-core/ui/core' — and any realm draws this addon's screens",
       ' * from the pack every client already holds.',
       ' */',
       'export function uiReference(): AddonReference {',

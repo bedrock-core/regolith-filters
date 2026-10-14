@@ -18,7 +18,7 @@ describe('guideScreenModules', () => {
     expect(everyone.page('Intro')).toBe('guide_intro');
   });
 
-  it('emits the entry, one module per page with pages sorted, then the back entry and the index', () => {
+  it('emits resident entries and a caller-return variant for every page and index', () => {
     const files = guideScreenModules(input).map(module => module.file);
 
     expect(files).toEqual([
@@ -27,6 +27,9 @@ describe('guideScreenModules', () => {
       'BP/scripts/guides/guide_intro.screen.tsx',
       'BP/scripts/guides/guide_home_back.screen.tsx',
       'BP/scripts/guides/guide_index.screen.tsx',
+      'BP/scripts/guides/guideback_page_getting_started_installation.screen.tsx',
+      'BP/scripts/guides/guideback_page_intro.screen.tsx',
+      'BP/scripts/guides/guideback_index.screen.tsx',
     ]);
   });
 
@@ -34,16 +37,16 @@ describe('guideScreenModules', () => {
     const [home, page] = guideScreenModules(input);
 
     expect(home.source).toContain('import manifest from "../../../data/guides/guides.generated.json";');
-    expect(home.source).toContain('export default guideHomeScreen(manifest, { title: "Guide" });');
-    expect(page.source).toContain('export default guidePageScreen(manifest, "getting-started/installation", { title: "Guide" });');
+    expect(home.source).toContain('export default guideNavigationScreen(manifest, { title: "Guide", entry: "home" });');
+    expect(page.source).toContain('export default guideNavigationScreen(manifest, { title: "Guide", entry: { page: "getting-started/installation" } });');
   });
 
-  it('imports the component registry when one is named, pages only', () => {
+  it('imports the registry into every entry because each preloads the complete guide', () => {
     const [home, page] = guideScreenModules({ ...input, components: 'BP/scripts/UI/guideComponents.ts' });
 
-    expect(home.source).not.toContain('components');
+    expect(home.source).toContain('import components from "../UI/guideComponents";');
     expect(page.source).toContain('import components from "../UI/guideComponents";');
-    expect(page.source).toContain('{ title: "Guide", components }');
+    expect(page.source).toContain('entry: { page: "getting-started/installation" }, components }');
   });
 
   it('refuses two pages that fold to one screen', () => {
@@ -69,23 +72,29 @@ describe('a gated guide', () => {
       'BP/scripts/guides/guide_intro.screen.tsx',
       'BP/scripts/guides/guide_home_back.screen.tsx',
       'BP/scripts/guides/guide_index.screen.tsx',
+      'BP/scripts/guides/guideback_page_intro.screen.tsx',
+      'BP/scripts/guides/guideback_index.screen.tsx',
       'BP/scripts/guides/guideop_home.screen.tsx',
       'BP/scripts/guides/guideop_admin_reset.screen.tsx',
       'BP/scripts/guides/guideop_intro.screen.tsx',
       'BP/scripts/guides/guideop_home_back.screen.tsx',
       'BP/scripts/guides/guideop_index.screen.tsx',
+      'BP/scripts/guides/guideopback_page_admin_reset.screen.tsx',
+      'BP/scripts/guides/guideopback_page_intro.screen.tsx',
+      'BP/scripts/guides/guideopback_index.screen.tsx',
     ]);
   });
 
   it('builds the ordinary set with no audience and the operators\' set for operators', () => {
     const sources = new Map(guideScreenModules({ ...gated, components: 'BP/scripts/UI/guideComponents.ts' }).map(module => [module.file.slice(module.file.lastIndexOf('/') + 1), module.source]));
 
-    expect(sources.get('guide_home.screen.tsx')).toContain('guideHomeScreen(manifest, { title: "Guide" });');
-    expect(sources.get('guide_intro.screen.tsx')).toContain('guidePageScreen(manifest, "intro", { title: "Guide", components });');
-    expect(sources.get('guideop_home.screen.tsx')).toContain('guideHomeScreen(manifest, { title: "Guide", audience: "op" });');
-    expect(sources.get('guideop_home_back.screen.tsx')).toContain('guideHomeScreen(manifest, { title: "Guide", audience: "op", back: true });');
-    expect(sources.get('guideop_index.screen.tsx')).toContain('guideIndexScreen(manifest, { title: "Guide", audience: "op" });');
-    expect(sources.get('guideop_admin_reset.screen.tsx')).toContain('guidePageScreen(manifest, "admin/reset", { title: "Guide", audience: "op", components });');
+    expect(sources.get('guide_home.screen.tsx')).toContain('guideNavigationScreen(manifest, { title: "Guide", entry: "home", components });');
+    expect(sources.get('guide_intro.screen.tsx')).toContain('guideNavigationScreen(manifest, { title: "Guide", entry: { page: "intro" }, components });');
+    expect(sources.get('guideop_home.screen.tsx')).toContain('guideNavigationScreen(manifest, { title: "Guide", audience: "op", entry: "home", components });');
+    expect(sources.get('guideop_home_back.screen.tsx')).toContain('guideNavigationScreen(manifest, { title: "Guide", audience: "op", entry: "home", back: true, components });');
+    expect(sources.get('guideop_index.screen.tsx')).toContain('guideNavigationScreen(manifest, { title: "Guide", audience: "op", entry: "index", components });');
+    expect(sources.get('guideop_admin_reset.screen.tsx')).toContain('guideNavigationScreen(manifest, { title: "Guide", audience: "op", entry: { page: "admin/reset" }, components });');
+    expect(sources.get('guideopback_page_admin_reset.screen.tsx')).toContain('entry: { page: "admin/reset" }, back: true, components');
   });
 
   it('compiles only the ordinary set when nothing is gated, whatever the page list', () => {
