@@ -2,6 +2,6 @@
 
 Regolith build filters for @bedrock-core addons.
 
-This repository is no longer maintained. Migrate projects to [@bedrock-core/builder](https://bedrock-core.drav.dev/docs/builder).
+This repository is unmaintained. Migrate projects to [@bedrock-core/builder](https://bedrock-core.drav.dev/docs/builder).
 
 Development and contributions continue in the [builder repository](https://github.com/bedrock-core/builder).
