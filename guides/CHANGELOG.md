@@ -1,5 +1,11 @@
 # @bedrock-core/regolith-filters_guides
 
+## 1.2.1
+
+### Patch Changes
+
+- [`f3cbd77`](https://github.com/bedrock-core/regolith-filters/commit/f3cbd77cf2081a22ca9f8f86f4b07cbab878af00) Thanks [@drav0011](https://github.com/drav0011)! - Generate resident guide navigation with fixed audience and caller-return entries.
+
 ## 1.2.0
 
 ### Minor Changes
