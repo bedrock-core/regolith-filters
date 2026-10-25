@@ -1,5 +1,11 @@
 # @bedrock-core/regolith-filters_ui-compiler
 
+## 0.1.1
+
+### Patch Changes
+
+- [`f3cbd77`](https://github.com/bedrock-core/regolith-filters/commit/f3cbd77cf2081a22ca9f8f86f4b07cbab878af00) Thanks [@drav0011](https://github.com/drav0011)! - Compile screen data in bounded worker batches so large UI catalogs do not retain every bundled module in memory.
+
 ## 0.1.0
 
 ### Minor Changes
